@@ -7,11 +7,13 @@ import { PurchaseOrdersController } from './purchase-orders.controller';
 import { SupplierPortalPoController } from './supplier-portal-po.controller';
 import { PurchaseOrdersService } from './purchase-orders.service';
 import { AuditModule } from '../audit/audit.module';
+import { BudgetModule } from '../budget/budget.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([PurchaseOrder, PurchaseOrderLineItem, User]),
     AuditModule,
+    BudgetModule,
   ],
   controllers: [PurchaseOrdersController, SupplierPortalPoController],
   providers: [PurchaseOrdersService],

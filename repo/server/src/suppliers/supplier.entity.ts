@@ -48,6 +48,14 @@ export class Supplier {
   })
   internalRiskFlag: string | null;
 
+  /**
+   * Optional spending cap (in dollars). When set, issuing a PO that would push
+   * the supplier's committed spend over this limit requires an ADMINISTRATOR override.
+   * Null means no cap is enforced.
+   */
+  @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true, default: null })
+  budgetCap: number | null;
+
   @Column({ type: 'text', nullable: true })
   fingerprint: string | null;
 

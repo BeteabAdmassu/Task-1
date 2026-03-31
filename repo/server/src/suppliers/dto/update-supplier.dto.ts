@@ -45,4 +45,7 @@ export class UpdateSupplierDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @IsOptional()
+  budgetCap?: number | null;
 }

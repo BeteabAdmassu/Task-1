@@ -180,8 +180,8 @@ The script exits with code `1` if any suite fails, making it suitable for CI pip
 ```bash
 cd repo/server
 JWT_SECRET=test-secret-for-testing npm test
-# Test Suites: 7 passed, 7 total
-# Tests:       77 passed, 77 total
+# Test Suites: 10 passed, 10 total
+# Tests:       115 passed, 115 total
 ```
 
 ### Frontend tests (standalone)
@@ -189,8 +189,8 @@ JWT_SECRET=test-secret-for-testing npm test
 ```bash
 cd repo/client
 npm test
-# Test Files  6 passed (6)
-# Tests  38 passed (38)
+# Test Files  9 passed (9)
+# Tests  58 passed (58)
 ```
 
 ---
@@ -212,9 +212,11 @@ repo/
 │   │   ├── knowledge-base/ Articles, versioning, favorites
 │   │   ├── search/         Full-text search, synonyms
 │   │   ├── notifications/  In-app notification center
+│   │   ├── budget/         Budget cap enforcement + authorized overrides
 │   │   ├── data-quality/   Deduplication, quality checks
 │   │   ├── observability/  Structured logs, job metrics, system stats
-│   │   └── migrations/     17 sequential DB migrations
+│   │   ├── seeds/          Non-production demo seed (npm run seed:demo)
+│   │   └── migrations/     18 sequential DB migrations
 │   └── package.json
 └── client/                 React + Vite SPA
     ├── public/sw.js        User-scoped offline KB cache
@@ -274,6 +276,114 @@ The Receive Goods screen (`/warehouse/receive`) supports two entry modes:
 | **Barcode Scan** | A scan input field appears. The operator scans (or types) a barcode code and presses Enter. The system matches the code against each line's *scan code* (= `catalogItemId` when present, otherwise the first 8 characters of the line-item UUID). A successful scan increments that line's received quantity by 1. Feedback is shown below the scan input. |
 
 The selected `entryMode` (`BARCODE` or `MANUAL`) is stored on the receipt record for audit purposes. Both modes require a variance reason code when `quantityReceived ≠ quantityExpected`.
+
+---
+
+## Seed / Demo Data
+
+A non-production seed creates one user per role plus minimal linked data for a full E2E walkthrough.
+
+```bash
+cd repo/server
+npm run seed:demo
+```
+
+**All demo users share the password `Demo1234!`**
+
+| Role | Username |
+|------|----------|
+| `ADMINISTRATOR` | `demo_admin` |
+| `PROCUREMENT_MANAGER` | `demo_pm` |
+| `WAREHOUSE_CLERK` | `demo_clerk` |
+| `PLANT_CARE_SPECIALIST` | `demo_plantcare` |
+| `SUPPLIER` | `demo_supplier` |
+
+The seed is **idempotent** — re-running skips records that already exist. It refuses to run when `NODE_ENV=production`.
+
+---
+
+## Budget Cap Controls
+
+### How it works
+
+Each supplier can have an optional `budgetCap` (decimal, dollars). When set:
+
+- **Committed amount** = SUM of `totalAmount` across that supplier's POs with status `ISSUED`, `PARTIALLY_RECEIVED`, or `FULLY_RECEIVED`.
+- **Available** = `budgetCap` − committed.
+- Issuing a PO (`PATCH /purchase-orders/:id/issue`) that would exceed the available budget is **blocked by default**.
+
+Enforcement is race-safe: `pg_advisory_xact_lock` is acquired inside the issue transaction, preventing concurrent over-commit.
+
+### Setting a budget cap
+
+```bash
+# PATCH /suppliers/:id  (ADMINISTRATOR or PROCUREMENT_MANAGER)
+curl -X PATCH http://localhost:3001/api/suppliers/<id>   -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json"   -d '{"budgetCap": 50000}'
+
+# Remove a cap (set to null)
+curl -X PATCH http://localhost:3001/api/suppliers/<id>   -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json"   -d '{"budgetCap": null}'
+```
+
+### Authorized override (ADMINISTRATOR only)
+
+When a PO would exceed the cap but business necessity requires proceeding, an ADMINISTRATOR can supply an override reason:
+
+```bash
+curl -X PATCH http://localhost:3001/api/purchase-orders/<id>/issue   -H "Authorization: Bearer $ADMIN_TOKEN"   -H "Content-Type: application/json"   -d '{"override": true, "overrideReason": "Emergency greenhouse restock approved by board"}'
+```
+
+The override is recorded in `budget_overrides` (poId, supplierId, authorizedBy, amount, available at time, reason, timestamp) and written to the audit log (`BUDGET_OVERRIDE` action).
+
+---
+
+## Payment Callback / Webhook Endpoint
+
+```
+POST /api/payments/callback   (public — no JWT required)
+```
+
+Receives inbound payment-provider webhooks.
+
+**Request body:**
+```json
+{
+  "idempotencyKey": "provider-event-id-abc123",
+  "connectorName":  "noop",
+  "event":          "payment.succeeded",
+  "payload":        { "amount": 1500 }
+}
+```
+
+Alternatively, supply the idempotency key via the `X-Idempotency-Key` header.
+
+**Idempotency:** A duplicate delivery with the same key returns the cached result immediately — no side effects.
+
+**Signature verification:** The connector's `verifyCallback(headers, body)` method is called first. The noop connector always accepts. Real connectors implement HMAC validation here.
+
+### Verifying in noop / local mode
+
+```bash
+# First call — processed fresh
+curl -s -X POST http://localhost:3001/api/payments/callback   -H "Content-Type: application/json"   -d '{"idempotencyKey":"test-001","event":"payment.succeeded"}' | jq .
+# -> { "processed": true, "alreadyProcessed": false, "result": {...} }
+
+# Duplicate call — returns cached result
+curl -s -X POST http://localhost:3001/api/payments/callback   -H "Content-Type: application/json"   -d '{"idempotencyKey":"test-001","event":"payment.succeeded"}' | jq .
+# -> { "processed": true, "alreadyProcessed": true, "result": {...} }
+```
+
+---
+
+## Offline UX
+
+The **Search** (`/plant-care/search`) and **Notifications** (`/notifications`) pages distinguish between network loss and server errors:
+
+| Condition | UI shown |
+|-----------|----------|
+| `navigator.onLine = false` or fetch fails with no connectivity | Offline banner: "You are offline — results may be unavailable or stale." |
+| Online but server returns an error | Error banner with the server message |
+
+The banner updates reactively — going online clears it, going offline shows it, without a page reload.
 
 ---
 

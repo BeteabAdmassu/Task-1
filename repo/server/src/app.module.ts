@@ -20,6 +20,7 @@ import { SearchModule } from './search/search.module';
 import { DataQualityModule } from './data-quality/data-quality.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { BootstrapModule } from './bootstrap/bootstrap.module';
+import { BudgetModule } from './budget/budget.module';
 import { typeOrmConfig } from './config/typeorm.config';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -48,6 +49,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
     DataQualityModule,
     ObservabilityModule,
     BootstrapModule,
+    BudgetModule,
   ],
   providers: [
     {

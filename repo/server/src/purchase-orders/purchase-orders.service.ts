@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
@@ -11,11 +12,19 @@ import { PurchaseRequest } from '../procurement/entities/purchase-request.entity
 import { PoStatus } from '../common/enums/po-status.enum';
 import { AuditAction } from '../common/enums/audit-action.enum';
 import { NotificationType } from '../common/enums/notification-type.enum';
+import { Role } from '../common/enums/role.enum';
 import { AuditService } from '../audit/audit.service';
 import { NotificationService } from '../notifications/notification.service';
+import { BudgetService } from '../budget/budget.service';
 import { QueryPosDto } from './dto/query-pos.dto';
 import { UpdatePoDto } from './dto/update-po.dto';
 import { FindOptionsWhere } from 'typeorm';
+
+export interface BudgetOverrideContext {
+  authorized: true;
+  reason: string;
+  role: string;
+}
 
 const CANCELLABLE_STATUSES = [PoStatus.DRAFT, PoStatus.ISSUED, PoStatus.PARTIALLY_RECEIVED];
 
@@ -29,6 +38,7 @@ export class PurchaseOrdersService {
     private readonly dataSource: DataSource,
     private readonly auditService: AuditService,
     private readonly notificationService: NotificationService,
+    private readonly budgetService: BudgetService,
   ) {}
 
   private async generatePoNumber(): Promise<string> {
@@ -137,13 +147,56 @@ export class PurchaseOrdersService {
     return this.findById(id);
   }
 
-  async issue(id: string, userId: string): Promise<PurchaseOrder> {
+  async issue(
+    id: string,
+    userId: string,
+    override?: BudgetOverrideContext,
+  ): Promise<PurchaseOrder> {
     return this.dataSource.transaction(async (manager) => {
       const po = await manager.findOne(PurchaseOrder, { where: { id } });
       if (!po) throw new NotFoundException('Purchase order not found');
       if (po.status !== PoStatus.DRAFT) {
         throw new BadRequestException('Only DRAFT purchase orders can be issued');
       }
+
+      // ── Budget cap enforcement ───────────────────────────────────────────────
+      if (po.supplierId) {
+        const budget = await this.budgetService.checkAndEnforce(
+          manager,
+          po.supplierId,
+          Number(po.totalAmount),
+        );
+
+        if (!budget.allowed) {
+          if (!override?.authorized) {
+            throw new BadRequestException(
+              `Budget cap exceeded for this supplier. ` +
+                `Cap: $${budget.cap?.toFixed(2)}, ` +
+                `Committed: $${budget.committed.toFixed(2)}, ` +
+                `Available: $${budget.available?.toFixed(2)}, ` +
+                `Required: $${Number(po.totalAmount).toFixed(2)}. ` +
+                `An ADMINISTRATOR override with a reason is required to proceed.`,
+            );
+          }
+
+          if (override.role !== Role.ADMINISTRATOR) {
+            throw new ForbiddenException(
+              'Budget cap override requires ADMINISTRATOR role',
+            );
+          }
+
+          await this.budgetService.recordOverride(
+            manager,
+            po.id,
+            po.supplierId,
+            userId,
+            Number(po.totalAmount),
+            budget.available ?? 0,
+            override.reason,
+          );
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────────
 
       po.status = PoStatus.ISSUED;
       po.issuedAt = new Date();

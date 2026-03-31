@@ -67,4 +67,12 @@ export class NoOpPaymentConnector implements IPaymentConnector {
     void transactionId;
     return { success: true, message: 'NoOp connector: status tracking not available' };
   }
+
+  /**
+   * NoOp signature verification — always accepts the callback.
+   * Real connectors would check `headers['x-signature']` against an HMAC of `body`.
+   */
+  verifyCallback(_headers: Record<string, string>, _body: unknown): boolean {
+    return true;
+  }
 }

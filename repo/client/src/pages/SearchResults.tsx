@@ -13,6 +13,19 @@ export function SearchResults() {
   const [results, setResults] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  // Track connectivity changes reactively
+  useEffect(() => {
+    const goOnline = () => setIsOffline(false);
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
 
   const load = useCallback(async () => {
     if (!q.trim()) return;
@@ -21,7 +34,12 @@ export function SearchResults() {
     try {
       setResults(await searchArticles({ q, ...(category ? { category } : {}) }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed');
+      if (!navigator.onLine) {
+        setIsOffline(true);
+        setError(null);
+      } else {
+        setError(err instanceof Error ? err.message : 'Search failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -56,6 +74,13 @@ export function SearchResults() {
           ))}
         </select>
       </div>
+
+      {isOffline && (
+        <div className="offline-banner" role="status">
+          You are offline — search results may be unavailable or stale. Connect to the
+          network and refresh to see up-to-date results.
+        </div>
+      )}
 
       {results?.expandedTerms && results.expandedTerms.length > 1 && (
         <div className="search-expanded-terms">

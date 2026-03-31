@@ -22,6 +22,13 @@ export interface IPaymentConnector {
   ): Promise<PaymentResult>;
 
   getStatus(transactionId: string): Promise<PaymentResult>;
+
+  /**
+   * Validates an inbound callback/webhook from the payment provider.
+   * Real connectors verify an HMAC signature from the request headers.
+   * The noop connector always returns true (no external service involved).
+   */
+  verifyCallback(headers: Record<string, string>, body: unknown): boolean;
 }
 
 export const PAYMENT_CONNECTOR = 'PAYMENT_CONNECTOR';

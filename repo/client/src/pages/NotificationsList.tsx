@@ -15,6 +15,19 @@ export function NotificationsList() {
   const [error, setError] = useState<string | null>(null);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [page, setPage] = useState(1);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  // Track connectivity changes reactively
+  useEffect(() => {
+    const goOnline = () => setIsOffline(false);
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -22,7 +35,12 @@ export function NotificationsList() {
     try {
       setData(await fetchNotifications({ unreadOnly, page, limit: 30 }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load');
+      if (!navigator.onLine) {
+        setIsOffline(true);
+        setError(null);
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to load');
+      }
     } finally {
       setLoading(false);
     }
@@ -78,6 +96,13 @@ export function NotificationsList() {
           Unread only
         </label>
       </div>
+
+      {isOffline && (
+        <div className="offline-banner" role="status">
+          You are offline — notifications may not reflect the latest activity.
+          Connect to the network and refresh to see up-to-date notifications.
+        </div>
+      )}
 
       {error && <div className="error-banner">{error}</div>}
 
