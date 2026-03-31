@@ -154,7 +154,28 @@ curl -I http://localhost:3001/api/health | grep -i x-frame
 # → x-frame-options: SAMEORIGIN
 ```
 
-### Backend tests
+### Run all tests (recommended)
+
+A convenience script runs both suites in sequence and prints a combined pass/fail summary:
+
+```bash
+bash repo/run_tests.sh
+# ══════════════════════════════════════════════════════
+#   Running: Backend unit + integration tests (Jest)
+# ══════════════════════════════════════════════════════
+#   ✔  Backend unit + integration tests (Jest) — PASSED
+# ══════════════════════════════════════════════════════
+#   Running: Frontend tests (Vitest)
+# ══════════════════════════════════════════════════════
+#   ✔  Frontend tests (Vitest) — PASSED
+# ══════════════════════════════════════════════════════
+#   Results:  2 passed  |  0 failed
+# ══════════════════════════════════════════════════════
+```
+
+The script exits with code `1` if any suite fails, making it suitable for CI pipelines.
+
+### Backend tests (standalone)
 
 ```bash
 cd repo/server
@@ -163,7 +184,7 @@ JWT_SECRET=test-secret-for-testing npm test
 # Tests:       77 passed, 77 total
 ```
 
-### Frontend tests
+### Frontend tests (standalone)
 
 ```bash
 cd repo/client
