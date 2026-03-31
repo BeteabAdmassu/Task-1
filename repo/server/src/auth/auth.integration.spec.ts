@@ -31,6 +31,7 @@ import {
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { Test } from '@nestjs/testing';
 import { InjectRepository } from '@nestjs/typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -209,6 +210,61 @@ describe('Auth + Authorization — HTTP integration', () => {
         .send({ username: 'alice', password: 'wrongpass' });
 
       expect(res.status).toBe(401);
+    });
+
+    it('rate-limits login to 10 per 15 min — returns 429 on the 11th attempt', async () => {
+      // Build an isolated app that includes ThrottlerGuard so the route-level
+      // @Throttle({ default: { ttl: 900_000, limit: 10 } }) is active.
+      // A fresh instance guarantees the throttle counter starts at 0.
+      const throttleModule = await Test.createTestingModule({
+        imports: [
+          PassportModule,
+          JwtModule.register({ secret: TEST_JWT_SECRET, signOptions: { expiresIn: '15m' } }),
+          ThrottlerModule.forRoot([{ ttl: 900_000, limit: 200 }]),
+        ],
+        controllers: [AuthController],
+        providers: [
+          JwtStrategy,
+          LocalStrategy,
+          {
+            provide: AuthService,
+            useValue: { ...mockAuthService, validateUser: jest.fn().mockResolvedValue(null) },
+          },
+          { provide: UsersService, useValue: { findByUsername: jest.fn() } },
+          { provide: getRepositoryToken(Session), useValue: mockSessionRepo },
+          { provide: getRepositoryToken(User), useValue: mockUserRepo },
+          { provide: APP_GUARD, useClass: JwtAuthGuard },
+          { provide: APP_GUARD, useClass: RolesGuard },
+          { provide: APP_GUARD, useClass: ThrottlerGuard },
+        ],
+      }).compile();
+
+      const throttleApp = throttleModule.createNestApplication();
+      throttleApp.setGlobalPrefix('api');
+      throttleApp.use(cookieParser());
+      throttleApp.useGlobalPipes(
+        new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      );
+      await throttleApp.init();
+
+      try {
+        const statuses: number[] = [];
+        for (let i = 0; i < 11; i++) {
+          const res = await request(throttleApp.getHttpServer())
+            .post('/api/auth/login')
+            .send({ username: 'alice', password: 'password1' });
+          statuses.push(res.status);
+        }
+
+        // First 10 attempts → 401 (bad credentials, within rate limit)
+        for (let i = 0; i < 10; i++) {
+          expect(statuses[i]).toBe(401);
+        }
+        // 11th attempt → 429 Too Many Requests
+        expect(statuses[10]).toBe(429);
+      } finally {
+        await throttleApp.close();
+      }
     });
   });
 

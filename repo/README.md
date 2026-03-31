@@ -184,7 +184,7 @@ repo/
 │   │   ├── notifications/  In-app notification center
 │   │   ├── data-quality/   Deduplication, quality checks
 │   │   ├── observability/  Structured logs, job metrics, system stats
-│   │   └── migrations/     15 sequential DB migrations
+│   │   └── migrations/     17 sequential DB migrations
 │   └── package.json
 └── client/                 React + Vite SPA
     ├── public/sw.js        User-scoped offline KB cache

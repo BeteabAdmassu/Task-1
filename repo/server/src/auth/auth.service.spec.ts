@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Not } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
@@ -138,6 +139,22 @@ describe('AuthService', () => {
       expect(sessionRepo.save).toHaveBeenCalled();
     });
 
+    it('rotates the refresh token — saved session has a different refreshToken', async () => {
+      const originalToken = 'tok123';
+      sessionRepo.findOne.mockResolvedValue(mockSession({ refreshToken: originalToken }));
+      sessionRepo.save.mockResolvedValue({});
+
+      const result = await service.refresh(originalToken);
+
+      // The returned refreshToken must differ from the one passed in
+      expect(result.refreshToken).toBeDefined();
+      expect(result.refreshToken).not.toBe(originalToken);
+
+      // The session was saved with the new token
+      const savedSession = sessionRepo.save.mock.calls[0][0];
+      expect(savedSession.refreshToken).toBe(result.refreshToken);
+    });
+
     it('throws 401 for unknown refresh token', async () => {
       sessionRepo.findOne.mockResolvedValue(null);
       await expect(service.refresh('bad-token')).rejects.toThrow(UnauthorizedException);
@@ -184,7 +201,7 @@ describe('AuthService', () => {
       userRepo.update.mockResolvedValue({});
       sessionRepo.delete.mockResolvedValue({});
 
-      await service.changePassword('user-1', 'oldPw', 'newPw12345');
+      await service.changePassword('user-1', 'oldPw', 'newPw12345', 'current-refresh-token');
 
       expect(userRepo.update).toHaveBeenCalledWith(
         'user-1',
@@ -192,11 +209,27 @@ describe('AuthService', () => {
       );
     });
 
+    it('deletes other sessions but preserves the current refresh token session', async () => {
+      userRepo.findOne.mockResolvedValue(mockUser());
+      jest.spyOn(bcrypt, 'compare').mockImplementation(async () => true);
+      jest.spyOn(bcrypt, 'hash').mockImplementation(async () => '$2b$12$newHash');
+      userRepo.update.mockResolvedValue({});
+      sessionRepo.delete.mockResolvedValue({});
+
+      await service.changePassword('user-1', 'oldPw', 'newPw12345', 'my-current-token');
+
+      // The delete must exclude the current session's refresh token
+      expect(sessionRepo.delete).toHaveBeenCalledWith({
+        userId: 'user-1',
+        refreshToken: Not('my-current-token'),
+      });
+    });
+
     it('throws 400 when current password is wrong', async () => {
       userRepo.findOne.mockResolvedValue(mockUser());
       jest.spyOn(bcrypt, 'compare').mockImplementation(async () => false);
 
-      await expect(service.changePassword('user-1', 'wrong', 'newPw12345')).rejects.toThrow(
+      await expect(service.changePassword('user-1', 'wrong', 'newPw12345', 'tok')).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -205,14 +238,14 @@ describe('AuthService', () => {
       userRepo.findOne.mockResolvedValue(mockUser());
       jest.spyOn(bcrypt, 'compare').mockImplementation(async () => true);
 
-      await expect(service.changePassword('user-1', 'same', 'same')).rejects.toThrow(
+      await expect(service.changePassword('user-1', 'same', 'same', 'tok')).rejects.toThrow(
         BadRequestException,
       );
     });
 
     it('throws 401 when user not found', async () => {
       userRepo.findOne.mockResolvedValue(null);
-      await expect(service.changePassword('bad-id', 'pw', 'newpw')).rejects.toThrow(
+      await expect(service.changePassword('bad-id', 'pw', 'newpw', 'tok')).rejects.toThrow(
         UnauthorizedException,
       );
     });

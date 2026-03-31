@@ -58,8 +58,8 @@ export class AuthController {
 
     const result = await this.authService.refresh(refreshToken);
 
-    // Re-set cookie to slide the expiry
-    res.cookie('refresh_token', refreshToken, {
+    // Set the rotated refresh token in the cookie
+    res.cookie('refresh_token', result.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
@@ -86,7 +86,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async changePassword(@Body() dto: ChangePasswordDto, @Req() req: Request) {
     const userId = (req.user as { id: string }).id;
-    await this.authService.changePassword(userId, dto.currentPassword, dto.newPassword);
+    const currentRefreshToken = req.cookies?.refresh_token ?? '';
+    await this.authService.changePassword(userId, dto.currentPassword, dto.newPassword, currentRefreshToken);
     return { message: 'Password changed successfully' };
   }
 }

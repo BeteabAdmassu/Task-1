@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { CHANGE_PASSWORD_PATH } from '../utils/routes';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -20,7 +21,7 @@ export function ProtectedRoute({ children, roles }: ProtectedRouteProps) {
 
   // Force password change before accessing any other protected route.
   // The check is skipped when already on /change-password to prevent a redirect loop.
-  if (user.mustChangePassword && location.pathname !== '/change-password') {
+  if (user.mustChangePassword && location.pathname !== CHANGE_PASSWORD_PATH) {
     return <Navigate to="/change-password" replace />;
   }
 

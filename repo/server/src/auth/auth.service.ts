@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
+import { Repository, LessThan, Not } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
@@ -79,7 +79,9 @@ export class AuthService {
       throw new UnauthorizedException('Session expired');
     }
 
-    // Slide the window
+    // Rotate the refresh token on every use
+    const newRefreshToken = crypto.randomBytes(48).toString('hex');
+    session.refreshToken = newRefreshToken;
     session.lastActivityAt = now;
     session.expiresAt = new Date(now.getTime() + SESSION_TIMEOUT_MS);
     await this.sessionsRepository.save(session);
@@ -90,6 +92,7 @@ export class AuthService {
 
     return {
       accessToken,
+      refreshToken: newRefreshToken,
       user: {
         id: user.id,
         username: user.username,
@@ -103,6 +106,7 @@ export class AuthService {
     userId: string,
     currentPassword: string,
     newPassword: string,
+    currentRefreshToken: string,
   ): Promise<void> {
     const user = await this.usersRepository.findOne({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('User not found');
@@ -120,8 +124,11 @@ export class AuthService {
       mustChangePassword: false,
     });
 
-    // Invalidate all existing sessions except the current one so other devices are logged out
-    await this.sessionsRepository.delete({ userId });
+    // Invalidate all sessions for this user except the current one
+    await this.sessionsRepository.delete({
+      userId,
+      refreshToken: Not(currentRefreshToken),
+    });
   }
 
   async logout(refreshToken: string): Promise<void> {

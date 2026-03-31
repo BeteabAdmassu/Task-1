@@ -41,12 +41,13 @@ import { Unauthorized } from './pages/Unauthorized';
 import { ChangePassword } from './pages/ChangePassword';
 import { useAuth } from './contexts/AuthContext';
 import { getRoleRedirectPath } from './utils/roles';
+import { CHANGE_PASSWORD_PATH } from './utils/routes';
 
 function RoleRedirect() {
   const { user } = useAuth();
   if (user) {
     if (user.mustChangePassword) {
-      return <Navigate to="/change-password" replace />;
+      return <Navigate to={CHANGE_PASSWORD_PATH} replace />;
     }
     return <Navigate to={getRoleRedirectPath(user.role)} replace />;
   }
@@ -59,7 +60,7 @@ export function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
       <Route
-        path="/change-password"
+        path={CHANGE_PASSWORD_PATH}
         element={
           <ProtectedRoute>
             <ChangePassword forced />
