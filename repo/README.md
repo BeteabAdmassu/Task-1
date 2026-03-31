@@ -273,8 +273,8 @@ using a network-first strategy with per-user cache keys.
 
 | Role | Access |
 |------|--------|
-| `ADMINISTRATOR` | Full access to all modules |
+| `ADMINISTRATOR` | Full access to all internal modules (procurement, warehouse, knowledge base, admin); no access to the supplier-facing portal |
 | `PROCUREMENT_MANAGER` | Procurement, approvals, suppliers, purchase orders, returns |
 | `WAREHOUSE_CLERK` | Receiving, goods receipt, putaway; can submit low-stock alerts |
 | `PLANT_CARE_SPECIALIST` | Knowledge base only |
-| `SUPPLIER` | Supplier portal (own POs and returns only) |
+| `SUPPLIER` | Supplier portal only — own POs and returns; cannot access any internal module |

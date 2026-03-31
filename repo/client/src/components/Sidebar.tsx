@@ -85,7 +85,7 @@ export function Sidebar() {
           <li>
             <NavLink to="/notifications">Notifications</NavLink>
           </li>
-          {(role === 'SUPPLIER' || role === 'ADMINISTRATOR') && (
+          {role === 'SUPPLIER' && (
             <li>
               <NavLink to="/supplier-portal">Supplier Portal</NavLink>
             </li>

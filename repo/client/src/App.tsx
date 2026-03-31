@@ -156,7 +156,7 @@ export function App() {
         <Route
           path="supplier-portal"
           element={
-            <ProtectedRoute roles={['SUPPLIER', 'ADMINISTRATOR']}>
+            <ProtectedRoute roles={['SUPPLIER']}>
               <SupplierPortal />
             </ProtectedRoute>
           }
@@ -164,7 +164,7 @@ export function App() {
         <Route
           path="supplier-portal/purchase-orders/:id"
           element={
-            <ProtectedRoute roles={['SUPPLIER', 'ADMINISTRATOR']}>
+            <ProtectedRoute roles={['SUPPLIER']}>
               <SupplierPortalPoDetail />
             </ProtectedRoute>
           }
@@ -172,7 +172,7 @@ export function App() {
         <Route
           path="supplier-portal/returns/:id"
           element={
-            <ProtectedRoute roles={['SUPPLIER', 'ADMINISTRATOR']}>
+            <ProtectedRoute roles={['SUPPLIER']}>
               <SupplierPortalReturnDetail />
             </ProtectedRoute>
           }
