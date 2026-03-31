@@ -8,6 +8,7 @@ import {
   HttpStatus,
   BadRequestException,
   UnauthorizedException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -29,6 +30,8 @@ export class PaymentCallbackController {
   /**
    * Receives inbound payment-provider webhooks / callbacks.
    *
+   * - Disabled by default: requires PAYMENTS_ENABLED=true to process callbacks.
+   *   When disabled, returns 503 to prevent silent noop acceptance in offline/local mode.
    * - Marked @Public() — callbacks arrive without a user JWT.
    * - Signature is verified via `connector.verifyCallback()`; the noop connector
    *   always returns true so no external dependency is needed locally.
@@ -49,6 +52,15 @@ export class PaymentCallbackController {
     alreadyProcessed: boolean;
     result: Record<string, unknown>;
   }> {
+    // Payment callbacks are disabled by default. An explicit opt-in is required
+    // to prevent the permissive noop connector from silently acting as production
+    // acceptance in offline/local deployments.
+    if (process.env.PAYMENTS_ENABLED !== 'true') {
+      throw new ServiceUnavailableException(
+        'Payment callbacks are disabled. Set PAYMENTS_ENABLED=true to enable.',
+      );
+    }
+
     // Verify provider signature — noop always passes; real connectors validate HMAC/JWT
     const headers = req.headers as Record<string, string>;
     if (!this.connector.verifyCallback(headers, body)) {

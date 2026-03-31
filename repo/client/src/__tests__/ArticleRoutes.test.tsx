@@ -39,20 +39,20 @@ function renderArticleRoutes(initialPath: string) {
             </ProtectedRoute>
           }
         >
-          {/* Create — admin only */}
+          {/* Create — admin and specialists */}
           <Route
             path="articles/new"
             element={
-              <ProtectedRoute roles={['ADMINISTRATOR']}>
+              <ProtectedRoute roles={['ADMINISTRATOR', 'PLANT_CARE_SPECIALIST']}>
                 <ArticleEditorPage />
               </ProtectedRoute>
             }
           />
-          {/* Edit — admin only */}
+          {/* Edit — admin and specialists */}
           <Route
             path="articles/:id/edit"
             element={
-              <ProtectedRoute roles={['ADMINISTRATOR']}>
+              <ProtectedRoute roles={['ADMINISTRATOR', 'PLANT_CARE_SPECIALIST']}>
                 <ArticleEditorPage />
               </ProtectedRoute>
             }
@@ -77,15 +77,15 @@ describe('Article authoring route permissions', () => {
       expect(screen.getByText('Article Editor')).toBeInTheDocument();
     });
 
-    it('redirects PLANT_CARE_SPECIALIST to /unauthorized', () => {
+    it('renders editor for PLANT_CARE_SPECIALIST (draft authoring)', () => {
       mockUseAuth.mockReturnValue({
         user: { id: 'u2', username: 'specialist', role: 'PLANT_CARE_SPECIALIST', mustChangePassword: false },
         loading: false,
       } as ReturnType<typeof useAuth>);
 
       renderArticleRoutes('/plant-care/articles/new');
-      expect(screen.getByText('Unauthorized')).toBeInTheDocument();
-      expect(screen.queryByText('Article Editor')).not.toBeInTheDocument();
+      expect(screen.getByText('Article Editor')).toBeInTheDocument();
+      expect(screen.queryByText('Unauthorized')).not.toBeInTheDocument();
     });
 
     it('redirects WAREHOUSE_CLERK to /unauthorized', () => {
@@ -120,14 +120,15 @@ describe('Article authoring route permissions', () => {
       expect(screen.getByText('Article Editor')).toBeInTheDocument();
     });
 
-    it('redirects PLANT_CARE_SPECIALIST to /unauthorized', () => {
+    it('renders editor for PLANT_CARE_SPECIALIST (draft editing)', () => {
       mockUseAuth.mockReturnValue({
         user: { id: 'u2', username: 'specialist', role: 'PLANT_CARE_SPECIALIST', mustChangePassword: false },
         loading: false,
       } as ReturnType<typeof useAuth>);
 
       renderArticleRoutes('/plant-care/articles/abc123/edit');
-      expect(screen.getByText('Unauthorized')).toBeInTheDocument();
+      expect(screen.getByText('Article Editor')).toBeInTheDocument();
+      expect(screen.queryByText('Unauthorized')).not.toBeInTheDocument();
     });
 
     it('redirects WAREHOUSE_CLERK to /unauthorized', () => {

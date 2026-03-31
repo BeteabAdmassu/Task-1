@@ -121,7 +121,7 @@ export function App() {
           <Route
             path="articles/new"
             element={
-              <ProtectedRoute roles={['ADMINISTRATOR']}>
+              <ProtectedRoute roles={['ADMINISTRATOR', 'PLANT_CARE_SPECIALIST']}>
                 <ArticleEditor />
               </ProtectedRoute>
             }
@@ -130,7 +130,7 @@ export function App() {
           <Route
             path="articles/:id/edit"
             element={
-              <ProtectedRoute roles={['ADMINISTRATOR']}>
+              <ProtectedRoute roles={['ADMINISTRATOR', 'PLANT_CARE_SPECIALIST']}>
                 <ArticleEditor />
               </ProtectedRoute>
             }

@@ -2,7 +2,8 @@
  * Integration tests for the payment callback endpoint.
  *
  * Covers:
- *  - Valid callback is processed and stored (200)
+ *  - Disabled-default rejection (503) when PAYMENTS_ENABLED is not set
+ *  - Valid callback is processed and stored (200) when PAYMENTS_ENABLED=true
  *  - Duplicate callback with the same idempotency key returns cached result without re-processing
  *  - Missing idempotency key → 400
  *  - Failed connector signature verification → 401
@@ -10,6 +11,8 @@
  */
 
 process.env.JWT_SECRET = 'callback-test-secret-32chars-xxxx!!';
+// Enable payments for the main test suite; individual blocks override as needed.
+process.env.PAYMENTS_ENABLED = 'true';
 
 import * as request from 'supertest';
 import * as cookieParser from 'cookie-parser';
@@ -26,6 +29,44 @@ import { PaymentIdempotencyKey } from './entities/payment-idempotency-key.entity
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { JwtStrategy } from '../auth/strategies/jwt.strategy';
+
+// ── Shared test module factory ────────────────────────────────────────────────
+
+async function buildApp(
+  connector: IPaymentConnector,
+  idempotencyRepo: object,
+): Promise<INestApplication> {
+  const module = await Test.createTestingModule({
+    imports: [
+      PassportModule,
+      JwtModule.register({
+        secret: process.env.JWT_SECRET,
+        signOptions: { expiresIn: '15m' },
+      }),
+    ],
+    controllers: [PaymentCallbackController],
+    providers: [
+      JwtStrategy,
+      { provide: PAYMENT_CONNECTOR, useValue: connector },
+      { provide: getRepositoryToken(PaymentIdempotencyKey), useValue: idempotencyRepo },
+      { provide: APP_GUARD, useClass: JwtAuthGuard },
+      { provide: APP_GUARD, useClass: RolesGuard },
+    ],
+  }).compile();
+
+  const app = module.createNestApplication();
+  app.setGlobalPrefix('api');
+  app.use(cookieParser());
+  app.useGlobalPipes(
+    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+  );
+  await app.init();
+  return app;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite: PAYMENTS_ENABLED=true (enabled mode)
+// ─────────────────────────────────────────────────────────────────────────────
 
 describe('POST /api/payments/callback', () => {
   let app: INestApplication;
@@ -53,31 +94,8 @@ describe('POST /api/payments/callback', () => {
   };
 
   beforeAll(async () => {
-    const module = await Test.createTestingModule({
-      imports: [
-        PassportModule,
-        JwtModule.register({
-          secret: process.env.JWT_SECRET,
-          signOptions: { expiresIn: '15m' },
-        }),
-      ],
-      controllers: [PaymentCallbackController],
-      providers: [
-        JwtStrategy,
-        { provide: PAYMENT_CONNECTOR, useValue: mockConnector },
-        { provide: getRepositoryToken(PaymentIdempotencyKey), useValue: idempotencyRepo },
-        { provide: APP_GUARD, useClass: JwtAuthGuard },
-        { provide: APP_GUARD, useClass: RolesGuard },
-      ],
-    }).compile();
-
-    app = module.createNestApplication();
-    app.setGlobalPrefix('api');
-    app.use(cookieParser());
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-    );
-    await app.init();
+    process.env.PAYMENTS_ENABLED = 'true';
+    app = await buildApp(mockConnector, idempotencyRepo);
   });
 
   afterAll(() => app.close());
@@ -86,9 +104,10 @@ describe('POST /api/payments/callback', () => {
     stored.clear();
     jest.clearAllMocks();
     (mockConnector.verifyCallback as jest.Mock).mockReturnValue(true);
+    process.env.PAYMENTS_ENABLED = 'true';
   });
 
-  // ── Happy path ─────────────────────────────────────────────────────────────
+  // ── Enabled callback flow — happy path ─────────────────────────────────────
 
   it('returns 200 and processes a new callback', async () => {
     const res = await request(app.getHttpServer())
@@ -161,5 +180,44 @@ describe('POST /api/payments/callback', () => {
     expect(res.status).toBe(401);
     // Nothing should have been stored
     expect(stored.size).toBe(0);
+  });
+
+  // ── Disabled-default rejection ─────────────────────────────────────────────
+
+  describe('when PAYMENTS_ENABLED is not set (disabled-default)', () => {
+    beforeEach(() => {
+      delete process.env.PAYMENTS_ENABLED;
+    });
+
+    afterEach(() => {
+      process.env.PAYMENTS_ENABLED = 'true';
+    });
+
+    it('returns 503 with a descriptive message', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/payments/callback')
+        .send({ idempotencyKey: 'should-be-rejected', event: 'payment.succeeded' });
+
+      expect(res.status).toBe(503);
+      expect(res.body.message).toMatch(/PAYMENTS_ENABLED/);
+    });
+
+    it('does not store any idempotency record', async () => {
+      await request(app.getHttpServer())
+        .post('/api/payments/callback')
+        .send({ idempotencyKey: 'no-store-key', event: 'payment.succeeded' });
+
+      expect(stored.size).toBe(0);
+      expect(idempotencyRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('returns 503 even when PAYMENTS_ENABLED is set to "false"', async () => {
+      process.env.PAYMENTS_ENABLED = 'false';
+      const res = await request(app.getHttpServer())
+        .post('/api/payments/callback')
+        .send({ idempotencyKey: 'false-flag-key', event: 'payment.succeeded' });
+
+      expect(res.status).toBe(503);
+    });
   });
 });

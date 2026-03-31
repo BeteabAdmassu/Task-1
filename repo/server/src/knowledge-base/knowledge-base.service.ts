@@ -141,11 +141,19 @@ export class KnowledgeBaseService {
     return this.findById(article.id, userId, Role.ADMINISTRATOR);
   }
 
-  async update(id: string, userId: string, dto: UpdateArticleDto): Promise<Article> {
+  async update(id: string, userId: string, userRole: string, dto: UpdateArticleDto): Promise<Article> {
     const article = await this.articleRepo.findOne({ where: { id } });
     if (!article) throw new NotFoundException('Article not found');
     if (article.status === ArticleStatus.ARCHIVED)
       throw new ForbiddenException('Cannot edit an archived article');
+
+    // Specialists may only edit their own draft articles; promotion stays admin-controlled.
+    if (userRole === Role.PLANT_CARE_SPECIALIST) {
+      if (article.authorId !== userId)
+        throw new ForbiddenException('Specialists may only edit their own articles');
+      if (article.status !== ArticleStatus.DRAFT)
+        throw new ForbiddenException('Specialists may only edit draft articles');
+    }
 
     await this.dataSource.transaction(async (manager) => {
       if (dto.title !== undefined) article.title = dto.title;
@@ -184,7 +192,7 @@ export class KnowledgeBaseService {
       title: article.title,
     });
 
-    return this.findById(id, userId, Role.ADMINISTRATOR);
+    return this.findById(id, userId, userRole);
   }
 
   async promote(id: string, userId: string, dto: PromoteArticleDto): Promise<Article> {

@@ -52,21 +52,21 @@ export class ArticlesController {
   }
 
   @Post()
-  @Roles(Role.ADMINISTRATOR)
+  @Roles(Role.ADMINISTRATOR, Role.PLANT_CARE_SPECIALIST)
   create(@Body() dto: CreateArticleDto, @Req() req: Request) {
     const userId = (req.user as { id: string }).id;
     return this.service.create(userId, dto);
   }
 
   @Patch(':id')
-  @Roles(Role.ADMINISTRATOR)
+  @Roles(Role.ADMINISTRATOR, Role.PLANT_CARE_SPECIALIST)
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateArticleDto,
     @Req() req: Request,
   ) {
-    const userId = (req.user as { id: string }).id;
-    return this.service.update(id, userId, dto);
+    const { id: userId, role } = req.user as { id: string; role: string };
+    return this.service.update(id, userId, role, dto);
   }
 
   @Patch(':id/promote')
