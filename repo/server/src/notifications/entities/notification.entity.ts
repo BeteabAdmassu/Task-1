@@ -30,7 +30,7 @@ export class Notification {
   @Column({ type: 'text' })
   message: string;
 
-  @Column({ length: 100, nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
   referenceType: string | null;
 
   @Column({ type: 'uuid', nullable: true })

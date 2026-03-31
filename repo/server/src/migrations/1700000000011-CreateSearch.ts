@@ -5,17 +5,39 @@ export class CreateSearch1700000000011 implements MigrationInterface {
     // Enable pg_trgm for similarity search
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
 
-    // Add tsvector generated column to articles
+    // Add tsvector column to articles (maintained by trigger)
     await queryRunner.query(`
-      ALTER TABLE articles
-        ADD COLUMN search_vector tsvector
-          GENERATED ALWAYS AS (
-            to_tsvector('english',
-              coalesce(title, '') || ' ' ||
-              coalesce(content, '') || ' ' ||
-              coalesce(array_to_string(tags, ' '), '')
-            )
-          ) STORED
+      ALTER TABLE articles ADD COLUMN search_vector tsvector
+    `);
+
+    await queryRunner.query(`
+      CREATE OR REPLACE FUNCTION articles_search_vector_update()
+      RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        NEW.search_vector :=
+          to_tsvector('english',
+            coalesce(NEW.title, '') || ' ' ||
+            coalesce(NEW.content, '') || ' ' ||
+            coalesce(array_to_string(NEW.tags, ' '), '')
+          );
+        RETURN NEW;
+      END;
+      $$
+    `);
+
+    await queryRunner.query(`
+      CREATE TRIGGER articles_search_vector_trigger
+        BEFORE INSERT OR UPDATE ON articles
+        FOR EACH ROW EXECUTE FUNCTION articles_search_vector_update()
+    `);
+
+    await queryRunner.query(`
+      UPDATE articles SET search_vector =
+        to_tsvector('english',
+          coalesce(title, '') || ' ' ||
+          coalesce(content, '') || ' ' ||
+          coalesce(array_to_string(tags, ' '), '')
+        )
     `);
 
     await queryRunner.query(`
@@ -60,6 +82,8 @@ export class CreateSearch1700000000011 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE IF EXISTS search_synonyms`);
     await queryRunner.query(`DROP INDEX IF EXISTS idx_articles_title_trgm`);
     await queryRunner.query(`DROP INDEX IF EXISTS idx_articles_search`);
+    await queryRunner.query(`DROP TRIGGER IF EXISTS articles_search_vector_trigger ON articles`);
+    await queryRunner.query(`DROP FUNCTION IF EXISTS articles_search_vector_update`);
     await queryRunner.query(`ALTER TABLE articles DROP COLUMN IF EXISTS search_vector`);
   }
 }

@@ -17,7 +17,7 @@ export class JobRun {
   @Column({ type: 'timestamptz', nullable: true })
   finishedAt: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'int', nullable: true })
   durationMs: number | null;
 
   @Column({ default: 1 })

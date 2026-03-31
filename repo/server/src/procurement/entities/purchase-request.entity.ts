@@ -35,7 +35,7 @@ export class PurchaseRequest {
   @JoinColumn({ name: 'requestedBy' })
   requester: User;
 
-  @Column({ nullable: true })
+  @Column({ type: 'uuid', nullable: true })
   supplierId: string | null;
 
   @ManyToOne(() => Supplier, { nullable: true, onDelete: 'SET NULL' })

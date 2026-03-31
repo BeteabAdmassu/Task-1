@@ -14,10 +14,10 @@ export class PutawayLocation {
   @Column({ length: 20, unique: true })
   code: string;
 
-  @Column({ length: 200, nullable: true })
+  @Column({ type: 'varchar', length: 200, nullable: true })
   description: string | null;
 
-  @Column({ length: 50, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   zone: string | null;
 
   @Column({ default: true })

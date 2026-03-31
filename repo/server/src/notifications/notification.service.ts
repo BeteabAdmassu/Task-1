@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import { Notification } from './entities/notification.entity';
 import { NotificationPreference } from './entities/notification-preference.entity';
 import { NotificationThrottle } from './entities/notification-throttle.entity';
@@ -81,9 +81,23 @@ export class NotificationService {
     }
   }
 
-  // Drain all queued notifications for all users (used by scheduler)
-  async drainQueue(): Promise<void> {
-    const users: Array<{ recipientId: string }> = await this.notifRepo
+  /**
+   * Drain all queued notifications for all users.
+   *
+   * When called by the scheduler pass an EntityManager so every read and write
+   * in this method participates in the same transaction.  The transaction is
+   * opened by the scheduler, not here, so a failure rolls back all deliveries
+   * from that attempt atomically, leaving no partial state for the retry.
+   *
+   * When called without a manager (e.g. from tests or ad-hoc tooling) the
+   * method falls back to the injected repository with auto-commit semantics.
+   */
+  async drainQueue(manager?: EntityManager): Promise<void> {
+    const notifRepo: Repository<Notification> = manager
+      ? manager.getRepository(Notification)
+      : this.notifRepo;
+
+    const users: Array<{ recipientId: string }> = await notifRepo
       .createQueryBuilder('n')
       .select('DISTINCT n.recipientId', 'recipientId')
       .where('n.isQueued = true')
@@ -91,23 +105,29 @@ export class NotificationService {
 
     for (const { recipientId } of users) {
       const windowStart = new Date(Date.now() - THROTTLE_WINDOW_MS);
-      const currentCount = await this.notifRepo
+      const currentCount = await notifRepo
         .createQueryBuilder('n')
         .where('n.recipientId = :recipientId', { recipientId })
         .andWhere('n.isQueued = false')
         .andWhere('n.createdAt >= :windowStart', { windowStart })
         .getCount();
 
-      await this.deliverQueued(recipientId, currentCount);
+      await this.deliverQueued(recipientId, currentCount, notifRepo);
     }
   }
 
-  // Promote oldest queued notifications up to available capacity
-  private async deliverQueued(recipientId: string, currentCount: number): Promise<void> {
+  // Promote oldest queued notifications up to available capacity.
+  // Accepts the repository to use so callers inside a transaction share the
+  // same EntityManager-scoped repo.
+  private async deliverQueued(
+    recipientId: string,
+    currentCount: number,
+    notifRepo: Repository<Notification> = this.notifRepo,
+  ): Promise<void> {
     const capacity = THROTTLE_LIMIT - currentCount;
     if (capacity <= 0) return;
 
-    const queued = await this.notifRepo.find({
+    const queued = await notifRepo.find({
       where: { recipientId, isQueued: true },
       order: { createdAt: 'ASC' },
       take: capacity,
@@ -115,7 +135,7 @@ export class NotificationService {
 
     if (queued.length === 0) return;
 
-    await this.notifRepo
+    await notifRepo
       .createQueryBuilder()
       .update(Notification)
       .set({ isQueued: false })

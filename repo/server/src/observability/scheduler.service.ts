@@ -100,7 +100,9 @@ export class SchedulerService implements OnModuleInit {
         );
       case 'notification-queue-drain':
         return this.runJob('notification-queue-drain', () =>
-          this.notificationService.drainQueue(),
+          this.dataSource.transaction((manager) =>
+            this.notificationService.drainQueue(manager),
+          ),
         );
       case 'session-cleanup':
         return this.runJob('session-cleanup', () => this.cleanExpiredSessions());
@@ -126,7 +128,9 @@ export class SchedulerService implements OnModuleInit {
   @Cron(CronExpression.EVERY_HOUR)
   async scheduledQueueDrain(): Promise<void> {
     await this.runJob('notification-queue-drain', () =>
-      this.notificationService.drainQueue(),
+      this.dataSource.transaction((manager) =>
+        this.notificationService.drainQueue(manager),
+      ),
     );
   }
 

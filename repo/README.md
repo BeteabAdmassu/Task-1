@@ -150,8 +150,8 @@ curl -I http://localhost:3001/api/health | grep -i x-frame
 ```bash
 cd repo/server
 JWT_SECRET=test-secret-for-testing npm test
-# Test Suites: 6 passed, 6 total
-# Tests:       69 passed, 69 total
+# Test Suites: 7 passed, 7 total
+# Tests:       77 passed, 77 total
 ```
 
 ### Frontend tests
@@ -215,6 +215,21 @@ repo/
 | `ADMIN_BOOTSTRAP_USERNAME` | `admin` | Initial admin username (one-time) |
 | `ADMIN_BOOTSTRAP_PASSWORD` | *(none)* | Initial admin password (one-time) |
 | `NODE_ENV` | — | Set to `production` to enable secure cookies |
+
+---
+
+## Background Job Rollback Guarantee
+
+All mutating scheduled jobs run inside a single database transaction per attempt.  A failed attempt is fully rolled back before the next retry, so no partial writes persist between attempts.
+
+| Job | Mutation | Transaction strategy |
+|-----|----------|----------------------|
+| `dedup-scan` | Writes to `duplicate_candidates` | Internal `dataSource.transaction()` in `runDedupScan()` threads `EntityManager` through `checkForDuplicates()` |
+| `notification-queue-drain` | Updates `isQueued` flag on notifications | `dataSource.transaction()` opened by the scheduler; `drainQueue(manager)` accepts the manager and routes all reads/writes through `manager.getRepository(Notification)` |
+| `session-cleanup` | Deletes expired sessions | Single atomic `DELETE` statement — inherently atomic |
+| `data-quality-check` | Read-only (in-memory report cache) | No transaction needed |
+
+Retry behavior (up to 3 attempts with exponential backoff 1 s → 4 s → 16 s) is unchanged. Each retry opens a fresh transaction.
 
 ---
 

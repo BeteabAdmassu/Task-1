@@ -31,7 +31,7 @@ export class FundsLedgerEntry {
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   runningBalance: number;
 
-  @Column({ length: 50, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   referenceType: string | null;
 
   @Column({ type: 'uuid', nullable: true })
