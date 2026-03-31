@@ -22,6 +22,7 @@ import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
 import { ApprovalActionDto } from './dto/approval-action.dto';
 import { QueryRequestsDto } from './dto/query-requests.dto';
+import { Role } from '../common/enums/role.enum';
 
 // Approval tier thresholds
 const AUTO_APPROVE_LIMIT = 500;
@@ -178,7 +179,7 @@ export class ProcurementService {
   }
 
   async submit(id: string, userId: string): Promise<PurchaseRequest> {
-    return this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
       const request = await manager.findOne(PurchaseRequest, {
         where: { id },
         relations: ['lineItems'],
@@ -215,9 +216,12 @@ export class ProcurementService {
           { type: 'PurchaseRequest', id: request.id },
         );
 
-        // Auto-generate a draft PO
-        const fullRequest = await this.findById(request.id);
-        await this.purchaseOrdersService.generateFromRequest(fullRequest, userId);
+        // Auto-generate a draft PO — read via transaction manager so we see uncommitted state
+        const fullRequest = await manager.findOne(PurchaseRequest, {
+          where: { id: request.id },
+          relations: ['requester', 'supplier', 'lineItems'],
+        });
+        await this.purchaseOrdersService.generateFromRequest(fullRequest!, userId);
       } else {
         request.status = RequestStatus.PENDING_APPROVAL;
         await manager.save(request);
@@ -236,20 +240,22 @@ export class ProcurementService {
           { type: 'PurchaseRequest', id: request.id },
         );
       }
-
-      return this.findById(request.id);
     });
+    // Read after commit so the caller sees the final committed status
+    return this.findById(id);
   }
 
   async processApproval(
     requestId: string,
     dto: ApprovalActionDto,
     approverId: string,
+    approverRole: Role,
+    isSupervisor: boolean,
   ): Promise<PurchaseRequest> {
-    return this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
       const request = await manager.findOne(PurchaseRequest, {
         where: { id: requestId },
-        relations: ['approvals'],
+        relations: ['approvals', 'approvals.approver'],
       });
 
       if (!request) throw new NotFoundException('Purchase request not found');
@@ -268,6 +274,16 @@ export class ProcurementService {
         throw new BadRequestException('You have already approved this request');
       }
 
+      // Enforce supervisor eligibility for tier-1 approval
+      if (dto.action === ApprovalAction.APPROVE && request.approvalTier === 1) {
+        const supervisorEligible = approverRole === Role.ADMINISTRATOR || isSupervisor;
+        if (!supervisorEligible) {
+          throw new ForbiddenException(
+            'Tier-1 requests ($500–$5,000) require a supervisor-authorized approver',
+          );
+        }
+      }
+
       // Record the approval/rejection
       const approval = manager.create(Approval, {
         requestId,
@@ -278,8 +294,7 @@ export class ProcurementService {
       await manager.save(approval);
 
       if (dto.action === ApprovalAction.REJECT) {
-        request.status = RequestStatus.REJECTED;
-        await manager.save(request);
+        await manager.update(PurchaseRequest, requestId, { status: RequestStatus.REJECTED });
 
         await this.auditService.log(approverId, AuditAction.PR_REJECTED, 'PurchaseRequest', request.id, {
           requestNumber: request.requestNumber,
@@ -295,13 +310,26 @@ export class ProcurementService {
         );
       } else {
         // Count total approvals (including the one we just added)
-        const approvalCount =
-          request.approvals.filter((a) => a.action === ApprovalAction.APPROVE).length + 1;
+        const existingApproveActions = request.approvals.filter(
+          (a) => a.action === ApprovalAction.APPROVE,
+        );
+        const approvalCount = existingApproveActions.length + 1;
         const requiredApprovals = request.approvalTier === 2 ? 2 : 1;
 
         if (approvalCount >= requiredApprovals) {
-          request.status = RequestStatus.APPROVED;
-          await manager.save(request);
+          // Tier-2 requires at least one ADMINISTRATOR approval
+          if (request.approvalTier === 2) {
+            const allApproverRoles = [
+              ...existingApproveActions.map((a) => a.approver?.role),
+              approverRole,
+            ];
+            if (!allApproverRoles.includes(Role.ADMINISTRATOR)) {
+              throw new ForbiddenException(
+                'Tier-2 requests require at least one ADMINISTRATOR approval',
+              );
+            }
+          }
+          await manager.update(PurchaseRequest, requestId, { status: RequestStatus.APPROVED });
 
           await this.auditService.log(approverId, AuditAction.PR_APPROVED, 'PurchaseRequest', request.id, {
             requestNumber: request.requestNumber,
@@ -317,9 +345,12 @@ export class ProcurementService {
             { type: 'PurchaseRequest', id: request.id },
           );
 
-          // Generate draft PO on full approval
-          const fullRequest = await this.findById(request.id);
-          await this.purchaseOrdersService.generateFromRequest(fullRequest, approverId);
+          // Generate draft PO on full approval — read via transaction manager
+          const fullRequest = await manager.findOne(PurchaseRequest, {
+            where: { id: request.id },
+            relations: ['requester', 'supplier', 'lineItems'],
+          });
+          await this.purchaseOrdersService.generateFromRequest(fullRequest!, approverId);
         } else {
           // Still needs more approvals
           await this.auditService.log(approverId, AuditAction.PR_APPROVED, 'PurchaseRequest', request.id, {
@@ -339,8 +370,9 @@ export class ProcurementService {
         }
       }
 
-      return this.findById(requestId);
     });
+    // Read after commit so the caller sees the final committed status
+    return this.findById(requestId);
   }
 
   async cancel(id: string, userId: string): Promise<PurchaseRequest> {

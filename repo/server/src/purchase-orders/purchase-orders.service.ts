@@ -152,7 +152,7 @@ export class PurchaseOrdersService {
     userId: string,
     override?: BudgetOverrideContext,
   ): Promise<PurchaseOrder> {
-    return this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
       const po = await manager.findOne(PurchaseOrder, { where: { id } });
       if (!po) throw new NotFoundException('Purchase order not found');
       if (po.status !== PoStatus.DRAFT) {
@@ -216,13 +216,12 @@ export class PurchaseOrdersService {
           { type: 'PurchaseOrder', id: po.id },
         );
       }
-
-      return this.findById(id);
     });
+    return this.findById(id);
   }
 
   async cancel(id: string, userId: string): Promise<PurchaseOrder> {
-    return this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
       const po = await manager.findOne(PurchaseOrder, { where: { id } });
       if (!po) throw new NotFoundException('Purchase order not found');
       if (!CANCELLABLE_STATUSES.includes(po.status)) {
@@ -238,9 +237,8 @@ export class PurchaseOrdersService {
         poNumber: po.poNumber,
         previousStatus: po.status,
       });
-
-      return this.findById(id);
     });
+    return this.findById(id);
   }
 
   // Used by the receiving module (Prompt 7) to update status

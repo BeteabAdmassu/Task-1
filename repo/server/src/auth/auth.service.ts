@@ -35,7 +35,7 @@ export class AuthService {
   }
 
   async login(user: User) {
-    const payload = { sub: user.id, username: user.username, role: user.role };
+    const payload = { sub: user.id, username: user.username, role: user.role, isSupervisor: user.isSupervisor };
     const accessToken = this.jwtService.sign(payload);
 
     const refreshToken = crypto.randomBytes(48).toString('hex');
@@ -57,6 +57,7 @@ export class AuthService {
         username: user.username,
         role: user.role,
         mustChangePassword: user.mustChangePassword,
+        isSupervisor: user.isSupervisor,
       },
     };
   }
@@ -87,7 +88,7 @@ export class AuthService {
     await this.sessionsRepository.save(session);
 
     const user = session.user;
-    const payload = { sub: user.id, username: user.username, role: user.role };
+    const payload = { sub: user.id, username: user.username, role: user.role, isSupervisor: user.isSupervisor };
     const accessToken = this.jwtService.sign(payload);
 
     return {
@@ -98,6 +99,7 @@ export class AuthService {
         username: user.username,
         role: user.role,
         mustChangePassword: user.mustChangePassword,
+        isSupervisor: user.isSupervisor,
       },
     };
   }

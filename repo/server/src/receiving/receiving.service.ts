@@ -53,10 +53,34 @@ export class ReceivingService {
       );
     }
 
+    // Build a fast lookup map: PO line item ID → PO line item
+    const poLineItemMap = new Map(po.lineItems.map((li) => [li.id, li]));
+
     const receiptNumber = await this.generateReceiptNumber();
 
     const lineItems = dto.lineItems.map((li) => {
-      const variance = Number(li.quantityReceived) - Number(li.quantityExpected);
+      // Validate the line item belongs to this PO
+      const poLineItem = poLineItemMap.get(li.poLineItemId);
+      if (!poLineItem) {
+        throw new BadRequestException(
+          `Line item ${li.poLineItemId} does not belong to PO ${dto.poId}`,
+        );
+      }
+
+      // Derive expected quantity server-side (remaining to receive)
+      const quantityExpected = Math.max(
+        0,
+        Number(poLineItem.quantity) - Number(poLineItem.quantityReceived),
+      );
+
+      // Reject over-receipt
+      if (Number(li.quantityReceived) > quantityExpected) {
+        throw new BadRequestException(
+          `Received quantity ${li.quantityReceived} exceeds remaining expected quantity ${quantityExpected} for line item ${li.poLineItemId}`,
+        );
+      }
+
+      const variance = Number(li.quantityReceived) - quantityExpected;
       if (variance !== 0 && (!li.varianceReasonCode || li.varianceReasonCode === VarianceReasonCode.NONE)) {
         throw new BadRequestException(
           `Variance on line item ${li.poLineItemId} requires a reason code`,
@@ -64,7 +88,7 @@ export class ReceivingService {
       }
       const rli = new ReceiptLineItem();
       rli.poLineItemId = li.poLineItemId;
-      rli.quantityExpected = Number(li.quantityExpected);
+      rli.quantityExpected = quantityExpected;
       rli.quantityReceived = Number(li.quantityReceived);
       rli.varianceQuantity = variance;
       rli.varianceReasonCode = li.varianceReasonCode ?? VarianceReasonCode.NONE;

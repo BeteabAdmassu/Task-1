@@ -24,4 +24,8 @@ export class CreateUserDto {
   @IsUUID()
   @IsOptional()
   supplierId?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isSupervisor?: boolean;
 }

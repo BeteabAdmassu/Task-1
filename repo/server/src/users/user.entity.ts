@@ -39,6 +39,9 @@ export class User {
   @Column({ default: false })
   mustChangePassword: boolean;
 
+  @Column({ default: false })
+  isSupervisor: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

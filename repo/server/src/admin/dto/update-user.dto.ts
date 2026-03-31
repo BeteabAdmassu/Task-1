@@ -13,4 +13,8 @@ export class UpdateUserDto {
   @IsUUID()
   @IsOptional()
   supplierId?: string | null;
+
+  @IsBoolean()
+  @IsOptional()
+  isSupervisor?: boolean;
 }

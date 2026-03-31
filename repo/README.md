@@ -323,6 +323,8 @@ The Receive Goods screen (`/warehouse/receive`) supports two entry modes:
 
 The selected `entryMode` (`BARCODE` or `MANUAL`) is stored on the receipt record for audit purposes. Both modes require a variance reason code when `quantityReceived ≠ quantityExpected`.
 
+**Server-enforced receiving integrity:** `quantityExpected` is derived server-side from the PO line item (`quantity − quantityReceived`) and is never accepted from the client. The API also rejects receipts where `quantityReceived` exceeds the remaining expected quantity (over-receipt) or where a `poLineItemId` does not belong to the target PO.
+
 ---
 
 ## Seed / Demo Data
@@ -336,15 +338,42 @@ npm run seed:demo
 
 **All demo users share the password `Demo1234!`**
 
-| Role | Username |
-|------|----------|
-| `ADMINISTRATOR` | `demo_admin` |
-| `PROCUREMENT_MANAGER` | `demo_pm` |
-| `WAREHOUSE_CLERK` | `demo_clerk` |
-| `PLANT_CARE_SPECIALIST` | `demo_plantcare` |
-| `SUPPLIER` | `demo_supplier` |
+| Role | Username | Notes |
+|------|----------|-------|
+| `ADMINISTRATOR` | `demo_admin` | Always supervisor-eligible |
+| `PROCUREMENT_MANAGER` | `demo_pm` | `isSupervisor = true` |
+| `WAREHOUSE_CLERK` | `demo_clerk` | |
+| `PLANT_CARE_SPECIALIST` | `demo_plantcare` | |
+| `SUPPLIER` | `demo_supplier` | |
 
 The seed is **idempotent** — re-running skips records that already exist. It refuses to run when `NODE_ENV=production`.
+
+---
+
+## Approval Chain
+
+Purchase requests are approved according to a three-tier authority model:
+
+| Tier | Amount | Required approvals | Eligible approvers |
+|------|--------|--------------------|--------------------|
+| 0 | ≤ $500.00 | None — auto-approved on submit | — |
+| 1 | $500.01 – $5,000.00 | 1 approval | `ADMINISTRATOR` **or** any user with `isSupervisor = true` |
+| 2 | > $5,000.00 | 2 approvals | At least one approver must be `ADMINISTRATOR` |
+
+**`isSupervisor` flag** — a boolean column on the `users` table (default `false`). Grant it to trusted `PROCUREMENT_MANAGER` accounts to allow them to approve tier-1 requests. Only `ADMINISTRATOR` can set this flag via `PATCH /api/admin/users/:id`.
+
+```bash
+# Grant supervisor authority to a procurement manager
+curl -X PATCH http://localhost:3001/api/admin/users/<id> \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"isSupervisor": true}'
+```
+
+Additional enforced rules:
+- A requester cannot approve their own request (regardless of role).
+- An approver cannot approve the same request twice.
+- REJECT actions do not require supervisor authority.
 
 ---
 

@@ -77,8 +77,8 @@ export class ProcurementController {
     @Body() dto: ApprovalActionDto,
     @Req() req: Request,
   ) {
-    const approverId = (req.user as { id: string }).id;
-    return this.procurementService.processApproval(id, dto, approverId);
+    const user = req.user as { id: string; role: Role; isSupervisor: boolean };
+    return this.procurementService.processApproval(id, dto, user.id, user.role, user.isSupervisor ?? false);
   }
 
   @Post('requests/:id/cancel')

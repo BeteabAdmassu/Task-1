@@ -11,6 +11,7 @@ import { ApprovalAction } from '../common/enums/approval-action.enum';
 import { AuditService } from '../audit/audit.service';
 import { NotificationService } from '../notifications/notification.service';
 import { PurchaseOrdersService } from '../purchase-orders/purchase-orders.service';
+import { Role } from '../common/enums/role.enum';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ describe('ProcurementService — approval tier logic', () => {
         findOne: jest.fn(),
         save: jest.fn(async (Entity: unknown, data: unknown) => data),
         create: jest.fn((_Entity: unknown, data: unknown) => data),
+        update: jest.fn(async () => undefined),
       };
       return fn(manager);
     }),
@@ -150,12 +152,13 @@ describe('ProcurementService — approval tier logic', () => {
           findOne: jest.fn(async () => makeRequest({ status: RequestStatus.DRAFT, approvals: [] })),
           save: jest.fn(),
           create: jest.fn((_E: unknown, d: unknown) => d),
+          update: jest.fn(async () => undefined),
         };
         return fn(manager);
       });
 
       await expect(
-        service.processApproval('req-1', { action: ApprovalAction.APPROVE }, 'approver-1'),
+        service.processApproval('req-1', { action: ApprovalAction.APPROVE }, 'approver-1', Role.PROCUREMENT_MANAGER, false),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -167,12 +170,13 @@ describe('ProcurementService — approval tier logic', () => {
           ),
           save: jest.fn(),
           create: jest.fn((_E: unknown, d: unknown) => d),
+          update: jest.fn(async () => undefined),
         };
         return fn(manager);
       });
 
       await expect(
-        service.processApproval('req-1', { action: ApprovalAction.APPROVE }, 'approver-1'),
+        service.processApproval('req-1', { action: ApprovalAction.APPROVE }, 'approver-1', Role.PROCUREMENT_MANAGER, false),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -184,19 +188,212 @@ describe('ProcurementService — approval tier logic', () => {
               status: RequestStatus.PENDING_APPROVAL,
               requestedBy: 'user-1',
               approvals: [
-                { approverId: 'approver-1', action: ApprovalAction.APPROVE } as Approval,
+                { approverId: 'approver-1', action: ApprovalAction.APPROVE, approver: { role: Role.PROCUREMENT_MANAGER } } as unknown as Approval,
               ],
             }),
           ),
           save: jest.fn(),
           create: jest.fn((_E: unknown, d: unknown) => d),
+          update: jest.fn(async () => undefined),
         };
         return fn(manager);
       });
 
       await expect(
-        service.processApproval('req-1', { action: ApprovalAction.APPROVE }, 'approver-1'),
+        service.processApproval('req-1', { action: ApprovalAction.APPROVE }, 'approver-1', Role.PROCUREMENT_MANAGER, false),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ── processApproval — tier-2 authority ───────────────────────────────
+
+  describe('processApproval — tier-2 authority', () => {
+    const makeTier2Request = (approvals: Partial<Approval>[] = []) =>
+      makeRequest({
+        status: RequestStatus.PENDING_APPROVAL,
+        requestedBy: 'user-1',
+        totalAmount: 6000,
+        approvalTier: 2,
+        approvals: approvals as Approval[],
+      });
+
+    it('blocks finalization when both approvers are PROCUREMENT_MANAGER (no ADMINISTRATOR)', async () => {
+      dataSource.transaction.mockImplementation(async (fn: (m: unknown) => Promise<unknown>) => {
+        const manager = {
+          findOne: jest.fn(async () =>
+            makeTier2Request([
+              { approverId: 'pm-1', action: ApprovalAction.APPROVE, approver: { role: Role.PROCUREMENT_MANAGER } as unknown as import('../users/user.entity').User },
+            ]),
+          ),
+          save: jest.fn(),
+          create: jest.fn((_E: unknown, d: unknown) => d),
+          update: jest.fn(async () => undefined),
+        };
+        requestRepo.findOne.mockResolvedValue(makeTier2Request());
+        return fn(manager);
+      });
+
+      await expect(
+        service.processApproval('req-1', { action: ApprovalAction.APPROVE }, 'pm-2', Role.PROCUREMENT_MANAGER, true),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('allows finalization when at least one approver is ADMINISTRATOR', async () => {
+      dataSource.transaction.mockImplementation(async (fn: (m: unknown) => Promise<unknown>) => {
+        const manager = {
+          findOne: jest.fn(async () =>
+            makeTier2Request([
+              { approverId: 'pm-1', action: ApprovalAction.APPROVE, approver: { role: Role.PROCUREMENT_MANAGER } as unknown as import('../users/user.entity').User },
+            ]),
+          ),
+          save: jest.fn(async (_E: unknown, data: unknown) => data),
+          create: jest.fn((_E: unknown, d: unknown) => d),
+          update: jest.fn(async () => undefined),
+        };
+        requestRepo.findOne.mockResolvedValue({
+          ...makeTier2Request(),
+          approvals: [{ approverId: 'pm-1', action: ApprovalAction.APPROVE, approver: { role: Role.PROCUREMENT_MANAGER } as unknown as import('../users/user.entity').User }],
+        });
+        purchaseOrdersService.generateFromRequest.mockResolvedValue({});
+        return fn(manager);
+      });
+
+      const result = await service.processApproval(
+        'req-1',
+        { action: ApprovalAction.APPROVE },
+        'admin-1',
+        Role.ADMINISTRATOR,
+        false,
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('allows tier-1 approval by PROCUREMENT_MANAGER without ADMINISTRATOR', async () => {
+      const tier1Request = makeRequest({
+        status: RequestStatus.PENDING_APPROVAL,
+        requestedBy: 'user-1',
+        totalAmount: 3000,
+        approvalTier: 1,
+        approvals: [],
+      });
+
+      dataSource.transaction.mockImplementation(async (fn: (m: unknown) => Promise<unknown>) => {
+        const manager = {
+          findOne: jest.fn(async () => tier1Request),
+          save: jest.fn(async (_E: unknown, data: unknown) => data),
+          create: jest.fn((_E: unknown, d: unknown) => d),
+          update: jest.fn(async () => undefined),
+        };
+        requestRepo.findOne.mockResolvedValue({ ...tier1Request, approvals: [] });
+        purchaseOrdersService.generateFromRequest.mockResolvedValue({});
+        return fn(manager);
+      });
+
+      const result = await service.processApproval(
+        'req-1',
+        { action: ApprovalAction.APPROVE },
+        'pm-1',
+        Role.PROCUREMENT_MANAGER,
+        true,
+      );
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ── processApproval — tier-1 supervisor authority ─────────────────────────────────
+
+  describe('processApproval — tier-1 supervisor authority', () => {
+    const makeTier1Request = () =>
+      makeRequest({
+        status: RequestStatus.PENDING_APPROVAL,
+        requestedBy: 'user-1',
+        totalAmount: 2000,
+        approvalTier: 1,
+        approvals: [],
+      });
+
+    it('blocks tier-1 approval for non-supervisor PROCUREMENT_MANAGER', async () => {
+      dataSource.transaction.mockImplementation(async (fn: (m: unknown) => Promise<unknown>) => {
+        const manager = {
+          findOne: jest.fn(async () => makeTier1Request()),
+          save: jest.fn(),
+          create: jest.fn((_E: unknown, d: unknown) => d),
+          update: jest.fn(async () => undefined),
+        };
+        return fn(manager);
+      });
+
+      await expect(
+        service.processApproval('req-1', { action: ApprovalAction.APPROVE }, 'pm-1', Role.PROCUREMENT_MANAGER, false),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('allows tier-1 approval for supervisor-flagged PROCUREMENT_MANAGER', async () => {
+      dataSource.transaction.mockImplementation(async (fn: (m: unknown) => Promise<unknown>) => {
+        const manager = {
+          findOne: jest.fn(async () => makeTier1Request()),
+          save: jest.fn(async (_E: unknown, data: unknown) => data),
+          create: jest.fn((_E: unknown, d: unknown) => d),
+          update: jest.fn(async () => undefined),
+        };
+        requestRepo.findOne.mockResolvedValue({ ...makeTier1Request(), approvals: [] });
+        purchaseOrdersService.generateFromRequest.mockResolvedValue({});
+        return fn(manager);
+      });
+
+      const result = await service.processApproval(
+        'req-1',
+        { action: ApprovalAction.APPROVE },
+        'pm-1',
+        Role.PROCUREMENT_MANAGER,
+        true,
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('allows tier-1 approval for ADMINISTRATOR regardless of isSupervisor flag', async () => {
+      dataSource.transaction.mockImplementation(async (fn: (m: unknown) => Promise<unknown>) => {
+        const manager = {
+          findOne: jest.fn(async () => makeTier1Request()),
+          save: jest.fn(async (_E: unknown, data: unknown) => data),
+          create: jest.fn((_E: unknown, d: unknown) => d),
+          update: jest.fn(async () => undefined),
+        };
+        requestRepo.findOne.mockResolvedValue({ ...makeTier1Request(), approvals: [] });
+        purchaseOrdersService.generateFromRequest.mockResolvedValue({});
+        return fn(manager);
+      });
+
+      const result = await service.processApproval(
+        'req-1',
+        { action: ApprovalAction.APPROVE },
+        'admin-1',
+        Role.ADMINISTRATOR,
+        false,
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('allows REJECT action by non-supervisor (no supervisor check on rejection)', async () => {
+      dataSource.transaction.mockImplementation(async (fn: (m: unknown) => Promise<unknown>) => {
+        const manager = {
+          findOne: jest.fn(async () => makeTier1Request()),
+          save: jest.fn(async (_E: unknown, data: unknown) => data),
+          create: jest.fn((_E: unknown, d: unknown) => d),
+          update: jest.fn(async () => undefined),
+        };
+        requestRepo.findOne.mockResolvedValue({ ...makeTier1Request(), approvals: [] });
+        return fn(manager);
+      });
+
+      const result = await service.processApproval(
+        'req-1',
+        { action: ApprovalAction.REJECT, comments: 'Budget not available' },
+        'pm-1',
+        Role.PROCUREMENT_MANAGER,
+        false,
+      );
+      expect(result).toBeDefined();
     });
   });
 

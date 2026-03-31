@@ -44,7 +44,6 @@ export type ReceivingEntryMode = 'BARCODE' | 'MANUAL';
 
 export interface CreateReceiptLineItemPayload {
   poLineItemId: string;
-  quantityExpected: number;
   quantityReceived: number;
   varianceReasonCode?: string;
   varianceNotes?: string;

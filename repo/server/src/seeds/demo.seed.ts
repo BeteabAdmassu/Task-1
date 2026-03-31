@@ -67,6 +67,15 @@ async function main() {
       console.log(`  created user: ${u.username} (${u.role})`);
     }
 
+    // Mark demo_pm as supervisor-eligible for tier-1 approval
+    if (userIds['demo_pm']) {
+      await qr.query(
+        `UPDATE users SET "isSupervisor" = true WHERE id = $1`,
+        [userIds['demo_pm']],
+      );
+      console.log('  marked demo_pm as supervisor');
+    }
+
     // ── 2. Supplier ───────────────────────────────────────────────────────────
     let supplierId: string;
     const existingSupplier = await qr.query(

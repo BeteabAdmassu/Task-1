@@ -74,6 +74,7 @@ export class AdminService {
       role: dto.role,
       isActive: dto.isActive ?? true,
       supplierId: dto.supplierId ?? null,
+      isSupervisor: dto.isSupervisor ?? false,
     });
 
     const saved = await this.usersRepository.save(user);
@@ -110,6 +111,12 @@ export class AdminService {
       changes.isActiveFrom = user.isActive;
       changes.isActiveTo = dto.isActive;
       user.isActive = dto.isActive;
+    }
+
+    if (dto.isSupervisor !== undefined && dto.isSupervisor !== user.isSupervisor) {
+      changes.isSupervisorFrom = user.isSupervisor;
+      changes.isSupervisorTo = dto.isSupervisor;
+      user.isSupervisor = dto.isSupervisor;
     }
 
     const saved = await this.usersRepository.save(user);

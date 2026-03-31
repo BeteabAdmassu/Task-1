@@ -161,7 +161,6 @@ export function ReceivingForm() {
         notes: notes || undefined,
         lineItems: lines.map((l) => ({
           poLineItemId: l.poLineItem.id,
-          quantityExpected: l.quantityExpected,
           quantityReceived: Number(l.quantityReceived),
           varianceReasonCode: l.varianceReasonCode !== 'NONE' ? l.varianceReasonCode : undefined,
           varianceNotes: l.varianceNotes || undefined,

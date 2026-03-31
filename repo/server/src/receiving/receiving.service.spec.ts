@@ -24,7 +24,6 @@ const makePo = (status = PoStatus.ISSUED) => ({
 
 const makeLineItemDto = (overrides = {}) => ({
   poLineItemId: 'li-1',
-  quantityExpected: 10,
   quantityReceived: 10,
   ...overrides,
 });
@@ -219,6 +218,63 @@ describe('ReceivingService', () => {
       await expect(
         service.create('user-1', { poId: 'po-1', lineItems: [makeLineItemDto()] }),
       ).resolves.toBeDefined();
+    });
+  });
+
+  // ── create — server-derived expected quantity ─────────────────────────────
+
+  describe('create — server-derived expected quantity', () => {
+    it('derives quantityExpected from PO line (quantity − quantityReceived)', async () => {
+      // PO line: quantity=10, quantityReceived=4 → remaining=6
+      poRepository.findOne.mockResolvedValue({
+        id: 'po-1',
+        status: PoStatus.ISSUED,
+        lineItems: [{ id: 'li-1', quantity: 10, quantityReceived: 4 }],
+      });
+
+      const dto = {
+        poId: 'po-1',
+        lineItems: [makeLineItemDto({ quantityReceived: 6 })],
+      };
+
+      await service.create('user-1', dto);
+
+      expect(receiptRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lineItems: expect.arrayContaining([
+            expect.objectContaining({ quantityExpected: 6, quantityReceived: 6 }),
+          ]),
+        }),
+      );
+    });
+
+    it('throws 400 when poLineItemId does not belong to the PO', async () => {
+      const dto = {
+        poId: 'po-1',
+        lineItems: [makeLineItemDto({ poLineItemId: 'li-unknown' })],
+      };
+
+      await expect(service.create('user-1', dto)).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws 400 when quantityReceived exceeds remaining expected quantity', async () => {
+      // PO line: quantity=10, quantityReceived=0 → remaining=10; client submits 11
+      const dto = {
+        poId: 'po-1',
+        lineItems: [makeLineItemDto({ quantityReceived: 11 })],
+      };
+
+      await expect(service.create('user-1', dto)).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws 400 when server-derived variance requires a reason code but none supplied', async () => {
+      // PO line: remaining=10; client submits 7 → variance=-3; no reason code
+      const dto = {
+        poId: 'po-1',
+        lineItems: [makeLineItemDto({ quantityReceived: 7 })],
+      };
+
+      await expect(service.create('user-1', dto)).rejects.toThrow(BadRequestException);
     });
   });
 

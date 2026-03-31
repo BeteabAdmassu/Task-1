@@ -9,10 +9,6 @@ export class CreateReceiptLineItemDto {
 
   @IsNumber()
   @Min(0)
-  quantityExpected: number;
-
-  @IsNumber()
-  @Min(0)
   quantityReceived: number;
 
   @IsEnum(VarianceReasonCode)
