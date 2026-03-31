@@ -37,7 +37,7 @@ interface AuthContextType {
   user: AuthUserExtended | null;
   loading: boolean;
   error: string | null;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<AuthUserExtended>;
   logout: () => Promise<void>;
   clearError: () => void;
 }
@@ -64,13 +64,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (username: string, password: string): Promise<AuthUserExtended> => {
     setError(null);
     try {
       const result = await apiLogin(username, password);
       const userData = result.user as AuthUserExtended;
       setUser(userData);
       swPostMessage({ type: 'SET_USER', userId: userData.id });
+      return userData;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);

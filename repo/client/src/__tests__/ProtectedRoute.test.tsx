@@ -35,6 +35,14 @@ function renderRoute(
             <div>Admin Content</div>
           </ProtectedRoute>
         } />
+        <Route
+          path="/change-password"
+          element={
+            <ProtectedRoute>
+              <div>Change Password Page</div>
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -83,5 +91,33 @@ describe('ProtectedRoute', () => {
     // During loading we should not see login page yet
     expect(screen.queryByText('Login Page')).not.toBeInTheDocument();
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
+  });
+
+  it('redirects to /change-password when mustChangePassword is true', () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'u1', username: 'admin', role: 'ADMINISTRATOR', mustChangePassword: true },
+      loading: false,
+    } as ReturnType<typeof useAuth>);
+    renderRoute({ user: {}, loading: false }, '/protected');
+    expect(screen.getByText('Change Password Page')).toBeInTheDocument();
+    expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
+  });
+
+  it('does not redirect when already on /change-password (no loop)', () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'u1', username: 'admin', role: 'ADMINISTRATOR', mustChangePassword: true },
+      loading: false,
+    } as ReturnType<typeof useAuth>);
+    renderRoute({ user: {}, loading: false }, '/change-password');
+    expect(screen.getByText('Change Password Page')).toBeInTheDocument();
+  });
+
+  it('allows access to protected route when mustChangePassword is false', () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'u1', username: 'admin', role: 'ADMINISTRATOR', mustChangePassword: false },
+      loading: false,
+    } as ReturnType<typeof useAuth>);
+    renderRoute({ user: {}, loading: false }, '/admin', ['ADMINISTRATOR']);
+    expect(screen.getByText('Admin Content')).toBeInTheDocument();
   });
 });

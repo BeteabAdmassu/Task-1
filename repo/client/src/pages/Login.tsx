@@ -15,14 +15,11 @@ export function Login() {
     clearError();
     setSubmitting(true);
     try {
-      await login(username, password);
-      // Read the user from a direct API call to get the role for redirect
-      const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        navigate(getRoleRedirectPath(data.user.role), { replace: true });
+      const userData = await login(username, password);
+      if (userData.mustChangePassword) {
+        navigate('/change-password', { replace: true });
       } else {
-        navigate('/', { replace: true });
+        navigate(getRoleRedirectPath(userData.role), { replace: true });
       }
     } catch {
       // error is set in context
