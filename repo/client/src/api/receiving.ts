@@ -40,6 +40,8 @@ export interface PaginatedReceipts {
   meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
+export type ReceivingEntryMode = 'BARCODE' | 'MANUAL';
+
 export interface CreateReceiptLineItemPayload {
   poLineItemId: string;
   quantityExpected: number;
@@ -112,6 +114,7 @@ export async function fetchReceipts(
 
 export async function createReceipt(payload: {
   poId: string;
+  entryMode?: ReceivingEntryMode;
   notes?: string;
   lineItems: CreateReceiptLineItemPayload[];
 }): Promise<ReceiptRecord> {

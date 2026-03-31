@@ -1,6 +1,7 @@
 import { IsUUID, IsString, IsOptional, IsArray, ValidateNested, IsNumber, IsEnum, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { VarianceReasonCode } from '../../common/enums/variance-reason-code.enum';
+import { ReceivingEntryMode } from '../../common/enums/receiving-entry-mode.enum';
 
 export class CreateReceiptLineItemDto {
   @IsUUID()
@@ -30,6 +31,10 @@ export class CreateReceiptLineItemDto {
 export class CreateReceiptDto {
   @IsUUID()
   poId: string;
+
+  @IsEnum(ReceivingEntryMode)
+  @IsOptional()
+  entryMode?: ReceivingEntryMode;
 
   @IsString()
   @IsOptional()

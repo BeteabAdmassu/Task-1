@@ -10,6 +10,7 @@ import { ReceiptLineItem } from './entities/receipt-line-item.entity';
 import { PurchaseOrder } from '../purchase-orders/entities/purchase-order.entity';
 import { PurchaseOrderLineItem } from '../purchase-orders/entities/purchase-order-line-item.entity';
 import { ReceiptStatus } from '../common/enums/receipt-status.enum';
+import { ReceivingEntryMode } from '../common/enums/receiving-entry-mode.enum';
 import { VarianceReasonCode } from '../common/enums/variance-reason-code.enum';
 import { PoStatus } from '../common/enums/po-status.enum';
 import { AuditAction } from '../common/enums/audit-action.enum';
@@ -77,6 +78,7 @@ export class ReceivingService {
       poId: dto.poId,
       receivedBy: userId,
       status: ReceiptStatus.IN_PROGRESS,
+      entryMode: dto.entryMode ?? ReceivingEntryMode.MANUAL,
       notes: dto.notes ?? null,
       lineItems,
     });

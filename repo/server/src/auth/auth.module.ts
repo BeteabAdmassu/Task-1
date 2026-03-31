@@ -14,9 +14,17 @@ import { UsersModule } from '../users/users.module';
   imports: [
     UsersModule,
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'change-me-to-a-random-secret',
-      signOptions: { expiresIn: '15m' },
+    JwtModule.registerAsync({
+      useFactory: () => {
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+          throw new Error(
+            'JWT_SECRET environment variable is required. ' +
+              'Set it to a random secret of at least 32 characters.',
+          );
+        }
+        return { secret, signOptions: { expiresIn: '15m' } };
+      },
     }),
     TypeOrmModule.forFeature([Session, User]),
   ],

@@ -62,16 +62,27 @@ export class DataQualityService {
 
   // ── Duplicate detection ───────────────────────────────────────────────────
 
+  /**
+   * Checks for duplicates for a single entity.
+   * When called inside a transaction (e.g., from runDedupScan), pass the
+   * EntityManager so writes participate in the transaction and are rolled back
+   * atomically on failure.
+   */
   async checkForDuplicates(
     entityType: 'Supplier' | 'Article',
     id: string,
     fingerprint: string,
+    manager?: EntityManager,
   ): Promise<void> {
     if (!fingerprint) return;
 
     const table = entityType === 'Supplier' ? 'suppliers' : 'articles';
+    const db = manager ?? this.dataSource;
+    const dupRepo = manager
+      ? manager.getRepository(DuplicateCandidate)
+      : this.dupRepo;
 
-    const rows: Array<{ id: string; score: string }> = await this.dataSource.query(
+    const rows: Array<{ id: string; score: string }> = await db.query(
       `
       SELECT id, similarity(fingerprint, $1) AS score
       FROM ${table}
@@ -89,14 +100,14 @@ export class DataQualityService {
       // Canonical pair ordering (smaller UUID first) prevents duplicate pairs
       const [sourceId, targetId] = id < row.id ? [id, row.id] : [row.id, id];
 
-      const existing = await this.dupRepo.findOne({
+      const existing = await dupRepo.findOne({
         where: { entityType, sourceId, targetId },
       });
 
       if (existing) {
         // Update score if improved
         if (score > Number(existing.similarityScore)) {
-          await this.dupRepo.update(existing.id, {
+          await dupRepo.update(existing.id, {
             similarityScore: score,
             isAutoMergeCandidate: score >= AUTO_MERGE_THRESHOLD,
             status:
@@ -108,7 +119,7 @@ export class DataQualityService {
         continue;
       }
 
-      await this.dupRepo.save({
+      await dupRepo.save({
         entityType,
         sourceId,
         targetId,
@@ -402,27 +413,40 @@ export class DataQualityService {
 
   // ── Full dedup scan ───────────────────────────────────────────────────────
 
+  /**
+   * Runs a full dedup scan wrapped in a single database transaction.
+   * If any write fails, the entire scan for this attempt is rolled back,
+   * preventing partial writes that could corrupt duplicate-candidate state
+   * across retry attempts.
+   */
   async runDedupScan(): Promise<void> {
     this.logger.log('Running full dedup scan…');
 
-    // Scan suppliers that have a fingerprint
-    const suppliers: Array<{ id: string; fingerprint: string }> = await this.dataSource.query(
-      `SELECT id, fingerprint FROM suppliers WHERE fingerprint IS NOT NULL AND "isActive" = true`,
-    );
-    for (const s of suppliers) {
-      await this.checkForDuplicates('Supplier', s.id, s.fingerprint);
-    }
+    let supplierCount = 0;
+    let articleCount = 0;
 
-    // Scan articles that have a fingerprint
-    const articles: Array<{ id: string; fingerprint: string }> = await this.dataSource.query(
-      `SELECT id, fingerprint FROM articles WHERE fingerprint IS NOT NULL AND status != 'ARCHIVED'`,
-    );
-    for (const a of articles) {
-      await this.checkForDuplicates('Article', a.id, a.fingerprint);
-    }
+    await this.dataSource.transaction(async (manager) => {
+      // Scan suppliers that have a fingerprint
+      const suppliers: Array<{ id: string; fingerprint: string }> = await manager.query(
+        `SELECT id, fingerprint FROM suppliers WHERE fingerprint IS NOT NULL AND "isActive" = true`,
+      );
+      supplierCount = suppliers.length;
+      for (const s of suppliers) {
+        await this.checkForDuplicates('Supplier', s.id, s.fingerprint, manager);
+      }
+
+      // Scan articles that have a fingerprint
+      const articles: Array<{ id: string; fingerprint: string }> = await manager.query(
+        `SELECT id, fingerprint FROM articles WHERE fingerprint IS NOT NULL AND status != 'ARCHIVED'`,
+      );
+      articleCount = articles.length;
+      for (const a of articles) {
+        await this.checkForDuplicates('Article', a.id, a.fingerprint, manager);
+      }
+    });
 
     this.logger.log(
-      `Dedup scan complete: checked ${suppliers.length} suppliers, ${articles.length} articles.`,
+      `Dedup scan complete: checked ${supplierCount} suppliers, ${articleCount} articles.`,
     );
   }
 

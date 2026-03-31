@@ -149,9 +149,9 @@ curl -I http://localhost:3001/api/health | grep -i x-frame
 
 ```bash
 cd repo/server
-npm test
-# Test Suites: 3 passed, 3 total
-# Tests:       28 passed, 28 total
+JWT_SECRET=test-secret-for-testing npm test
+# Test Suites: 6 passed, 6 total
+# Tests:       69 passed, 69 total
 ```
 
 ### Frontend tests
@@ -159,8 +159,8 @@ npm test
 ```bash
 cd repo/client
 npm test
-# Test Files  3 passed (3)
-# Tests  16 passed (16)
+# Test Files  6 passed (6)
+# Tests  38 passed (38)
 ```
 
 ---
@@ -208,13 +208,38 @@ repo/
 | `DB_USER` | `greenleaf` | Database user |
 | `DB_PASS` | `greenleaf_secret` | Database password |
 | `DB_NAME` | `greenleaf_db` | Database name |
-| `JWT_SECRET` | *(insecure default)* | JWT signing secret — **must be overridden** |
+| `JWT_SECRET` | **required** | JWT signing secret — server **will not start** without this |
 | `SESSION_TIMEOUT_MINUTES` | `30` | Sliding session window |
 | `API_PORT` | `3001` | Backend listen port |
 | `CORS_ORIGIN` | `http://localhost:5173` | Allowed frontend origin |
 | `ADMIN_BOOTSTRAP_USERNAME` | `admin` | Initial admin username (one-time) |
 | `ADMIN_BOOTSTRAP_PASSWORD` | *(none)* | Initial admin password (one-time) |
 | `NODE_ENV` | — | Set to `production` to enable secure cookies |
+
+---
+
+## Receiving Entry Modes
+
+The Receive Goods screen (`/warehouse/receive`) supports two entry modes:
+
+| Mode | Behavior |
+|------|----------|
+| **Manual Entry** | Operator types quantities directly into each line's numeric input. Tab/Enter moves to the next line. |
+| **Barcode Scan** | A scan input field appears. The operator scans (or types) a barcode code and presses Enter. The system matches the code against each line's *scan code* (= `catalogItemId` when present, otherwise the first 8 characters of the line-item UUID). A successful scan increments that line's received quantity by 1. Feedback is shown below the scan input. |
+
+The selected `entryMode` (`BARCODE` or `MANUAL`) is stored on the receipt record for audit purposes. Both modes require a variance reason code when `quantityReceived ≠ quantityExpected`.
+
+---
+
+## JWT Secret Requirement
+
+`JWT_SECRET` is **required** — the server will throw and refuse to start if it is absent. There is no insecure default fallback. Generate a strong secret before deployment:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+Set the output as `JWT_SECRET` in your `.env` file.
 
 ---
 

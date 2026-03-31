@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, FormEvent } from 'react';
+import { useState, useEffect, useRef, FormEvent, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchPos, PurchaseOrderRecord, PoLineItem } from '../api/purchase-orders';
 import {
@@ -6,6 +6,7 @@ import {
   createReceipt,
   completeReceipt,
   PutawayLocationRecord,
+  ReceivingEntryMode,
 } from '../api/receiving';
 
 const VARIANCE_REASONS = [
@@ -26,6 +27,15 @@ interface LineState {
   putawayLocationId: string;
 }
 
+/**
+ * Derives a scan code for a PO line item.
+ * Prefer catalogItemId when available (matches physical barcode labels),
+ * otherwise fall back to the first 8 chars of the line item UUID.
+ */
+function getScanCode(li: PoLineItem): string {
+  return li.catalogItemId ? li.catalogItemId : li.id.slice(0, 8).toUpperCase();
+}
+
 export function ReceivingForm() {
   const navigate = useNavigate();
   const [pos, setPos] = useState<PurchaseOrderRecord[]>([]);
@@ -33,12 +43,15 @@ export function ReceivingForm() {
   const [selectedPoId, setSelectedPoId] = useState('');
   const [lines, setLines] = useState<LineState[]>([]);
   const [notes, setNotes] = useState('');
+  const [entryMode, setEntryMode] = useState<ReceivingEntryMode>('MANUAL');
+  const [scanInput, setScanInput] = useState('');
+  const [lastScanFeedback, setLastScanFeedback] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const scanInputRef = useRef<HTMLInputElement | null>(null);
+  const manualInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    // Load ISSUED + PARTIALLY_RECEIVED POs
     Promise.all([
       fetchPos({ status: 'ISSUED', limit: '100' }),
       fetchPos({ status: 'PARTIALLY_RECEIVED', limit: '100' }),
@@ -49,8 +62,16 @@ export function ReceivingForm() {
     }).catch((err) => setError(err.message));
   }, []);
 
+  // Auto-focus scan input whenever barcode mode is active and a PO is selected
+  useEffect(() => {
+    if (entryMode === 'BARCODE' && selectedPoId && scanInputRef.current) {
+      scanInputRef.current.focus();
+    }
+  }, [entryMode, selectedPoId]);
+
   const handlePoSelect = (poId: string) => {
     setSelectedPoId(poId);
+    setLastScanFeedback(null);
     const po = pos.find((p) => p.id === poId);
     if (!po) { setLines([]); return; }
     setLines(
@@ -71,11 +92,49 @@ export function ReceivingForm() {
     );
   };
 
-  const handleQtyKeyDown = (e: React.KeyboardEvent, index: number) => {
+  const handleManualQtyKeyDown = (e: React.KeyboardEvent, index: number) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      const next = inputRefs.current[index + 1];
+      const next = manualInputRefs.current[index + 1];
       if (next) next.focus();
+    }
+  };
+
+  /**
+   * Barcode scan handler.
+   * Matches the scanned code against each line's scan code (catalogItemId or UUID prefix).
+   * On match, increments quantityReceived by 1.
+   */
+  const handleScan = useCallback(() => {
+    const code = scanInput.trim();
+    if (!code) return;
+
+    const idx = lines.findIndex(
+      (l) => getScanCode(l.poLineItem).toUpperCase() === code.toUpperCase(),
+    );
+
+    if (idx === -1) {
+      setLastScanFeedback(`No match for code "${code}"`);
+    } else {
+      const line = lines[idx];
+      const newQty = String(Number(line.quantityReceived) + 1);
+      setLines((prev) =>
+        prev.map((l, i) => (i === idx ? { ...l, quantityReceived: newQty } : l)),
+      );
+      setLastScanFeedback(
+        `Scanned: ${line.poLineItem.description} — Qty now ${newQty}`,
+      );
+    }
+
+    setScanInput('');
+    // Re-focus for next scan
+    scanInputRef.current?.focus();
+  }, [scanInput, lines]);
+
+  const handleScanKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleScan();
     }
   };
 
@@ -98,6 +157,7 @@ export function ReceivingForm() {
     try {
       const receipt = await createReceipt({
         poId: selectedPoId,
+        entryMode,
         notes: notes || undefined,
         lineItems: lines.map((l) => ({
           poLineItemId: l.poLineItem.id,
@@ -144,6 +204,33 @@ export function ReceivingForm() {
                 ))}
               </select>
             </div>
+
+            <div className="form-group">
+              <label>Entry Mode</label>
+              <div style={{ display: 'flex', gap: 16, marginTop: 6 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="entryMode"
+                    value="MANUAL"
+                    checked={entryMode === 'MANUAL'}
+                    onChange={() => { setEntryMode('MANUAL'); setLastScanFeedback(null); }}
+                  />
+                  Manual Entry
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="entryMode"
+                    value="BARCODE"
+                    checked={entryMode === 'BARCODE'}
+                    onChange={() => setEntryMode('BARCODE')}
+                  />
+                  Barcode Scan
+                </label>
+              </div>
+            </div>
+
             <div className="form-group form-group-full">
               <label>Notes</label>
               <textarea
@@ -155,6 +242,54 @@ export function ReceivingForm() {
           </div>
         </div>
 
+        {/* Barcode scan input — shown only in BARCODE mode once a PO is selected */}
+        {entryMode === 'BARCODE' && selectedPoId && (
+          <div className="detail-form" style={{ marginBottom: 24 }}>
+            <div className="form-group">
+              <label htmlFor="barcode-scan-input">
+                Scan Barcode
+                <span style={{ marginLeft: 8, fontSize: '0.8rem', color: '#666' }}>
+                  (scan or type code and press Enter)
+                </span>
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  id="barcode-scan-input"
+                  type="text"
+                  value={scanInput}
+                  onChange={(e) => setScanInput(e.target.value)}
+                  onKeyDown={handleScanKeyDown}
+                  ref={scanInputRef}
+                  placeholder="Ready to scan…"
+                  autoComplete="off"
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleScan}
+                  disabled={!scanInput.trim()}
+                >
+                  Confirm
+                </button>
+              </div>
+              {lastScanFeedback && (
+                <p
+                  style={{
+                    marginTop: 6,
+                    fontSize: '0.875rem',
+                    color: lastScanFeedback.startsWith('No match') ? '#c62828' : '#2e7d32',
+                  }}
+                  aria-live="polite"
+                  data-testid="scan-feedback"
+                >
+                  {lastScanFeedback}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {lines.length > 0 && (
           <>
             <h3 style={{ marginBottom: 12 }}>Line Items</h3>
@@ -163,6 +298,7 @@ export function ReceivingForm() {
                 <thead>
                   <tr>
                     <th>Description</th>
+                    {entryMode === 'BARCODE' && <th>Scan Code</th>}
                     <th>Expected Qty</th>
                     <th>Received Qty</th>
                     <th>Variance</th>
@@ -177,6 +313,13 @@ export function ReceivingForm() {
                     return (
                       <tr key={line.poLineItem.id}>
                         <td>{line.poLineItem.description}</td>
+                        {entryMode === 'BARCODE' && (
+                          <td>
+                            <code style={{ fontSize: '0.8rem' }}>
+                              {getScanCode(line.poLineItem)}
+                            </code>
+                          </td>
+                        )}
                         <td>{line.quantityExpected}</td>
                         <td>
                           <input
@@ -185,10 +328,13 @@ export function ReceivingForm() {
                             step="0.01"
                             value={line.quantityReceived}
                             onChange={(e) => updateLine(i, 'quantityReceived', e.target.value)}
-                            onKeyDown={(e) => handleQtyKeyDown(e, i)}
-                            ref={(el) => { inputRefs.current[i] = el; }}
+                            onKeyDown={(e) =>
+                              entryMode === 'MANUAL' ? handleManualQtyKeyDown(e, i) : undefined
+                            }
+                            ref={(el) => { manualInputRefs.current[i] = el; }}
                             style={{ width: 80 }}
                             required
+                            aria-label={`Received quantity for ${line.poLineItem.description}`}
                           />
                         </td>
                         <td style={{ color: hasVariance ? '#c62828' : 'inherit' }}>

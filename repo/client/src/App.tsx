@@ -117,9 +117,23 @@ export function App() {
           }
         >
           <Route path="articles" element={<ArticleList />} />
-          <Route path="articles/new" element={<ArticleEditor />} />
+          <Route
+            path="articles/new"
+            element={
+              <ProtectedRoute roles={['ADMINISTRATOR']}>
+                <ArticleEditor />
+              </ProtectedRoute>
+            }
+          />
           <Route path="articles/:id" element={<ArticleDetail />} />
-          <Route path="articles/:id/edit" element={<ArticleEditor />} />
+          <Route
+            path="articles/:id/edit"
+            element={
+              <ProtectedRoute roles={['ADMINISTRATOR']}>
+                <ArticleEditor />
+              </ProtectedRoute>
+            }
+          />
           <Route path="favorites" element={<FavoritesList />} />
           <Route path="search" element={<SearchResults />} />
         </Route>
