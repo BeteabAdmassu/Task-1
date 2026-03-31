@@ -154,44 +154,90 @@ curl -I http://localhost:3001/api/health | grep -i x-frame
 # → x-frame-options: SAMEORIGIN
 ```
 
-### Run all tests (recommended)
+### Running tests (cross-platform)
 
-A convenience script runs both suites in sequence and prints a combined pass/fail summary:
+The commands below work on **Windows, macOS, and Linux** — no bash required.
+
+**Backend (Jest):**
+
+```
+cd repo/server
+npm test
+```
+
+**Frontend (Vitest):**
+
+```
+cd repo/client
+npm test
+```
+
+### Run all tests via bash (optional)
+
+On macOS/Linux (or Git Bash / WSL on Windows) you can use the convenience script:
 
 ```bash
 bash repo/run_tests.sh
-# ══════════════════════════════════════════════════════
-#   Running: Backend unit + integration tests (Jest)
-# ══════════════════════════════════════════════════════
-#   ✔  Backend unit + integration tests (Jest) — PASSED
-# ══════════════════════════════════════════════════════
-#   Running: Frontend tests (Vitest)
-# ══════════════════════════════════════════════════════
-#   ✔  Frontend tests (Vitest) — PASSED
-# ══════════════════════════════════════════════════════
-#   Results:  2 passed  |  0 failed
-# ══════════════════════════════════════════════════════
 ```
 
 The script exits with code `1` if any suite fails, making it suitable for CI pipelines.
 
-### Backend tests (standalone)
+### End-to-End tests (Playwright)
 
-```bash
+E2E tests run a login-flow smoke suite against a real browser.
+
+Playwright automatically starts **two isolated servers** so tests never
+interfere with the developer's running servers (ports 3000/3001):
+
+| Server | Port | Purpose |
+|--------|------|---------|
+| NestJS backend | 3101 | Dedicated E2E backend with relaxed login throttle |
+| Vite frontend | 3100 | Dev server proxying `/api/*` to port 3101 |
+
+**One-time setup:**
+
+```
 cd repo/server
-JWT_SECRET=test-secret-for-testing npm test
-# Test Suites: 10 passed, 10 total
-# Tests:       115 passed, 115 total
+npx nest build
+
+cd repo
+npm install
+npx playwright install chromium
 ```
 
-### Frontend tests (standalone)
+**Prerequisites before each run:**
 
-```bash
-cd repo/client
-npm test
-# Test Files  9 passed (9)
-# Tests  58 passed (58)
+1. PostgreSQL running with the `greenleaf_db` database.
+2. Demo seed loaded (provides test credentials):
+   ```
+   cd repo/server
+   npm run seed:demo
+   ```
+3. Server compiled (only needed after backend code changes):
+   ```
+   cd repo/server
+   npx nest build
+   ```
+
+**Run E2E tests:**
+
 ```
+cd repo
+npm run test:e2e
+```
+
+**Environment variables (optional):**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `E2E_ADMIN_USER` | `demo_admin` | Username for the login test |
+| `E2E_ADMIN_PASS` | `Demo1234!` | Password for the login test |
+| `AUTH_LOGIN_THROTTLE_LIMIT` | `1000` (E2E) / `10` (prod) | Login attempts per 15 min — set via `playwright.config.ts` for E2E |
+
+> **Note:** The E2E backend uses a fallback `JWT_SECRET` when none is set
+> in the environment. This is safe because the E2E backend is ephemeral
+> and shares the same database (same password hashes). If ports 3100/3101
+> are already in use, Playwright will reuse the existing servers.
 
 ---
 

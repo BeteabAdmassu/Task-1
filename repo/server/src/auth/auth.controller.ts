@@ -17,12 +17,16 @@ import { Public } from '../common/decorators/public.decorator';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
+// Login throttle limit — configurable for E2E testing environments.
+// Production default: 10 attempts per 15 minutes per IP.
+const LOGIN_THROTTLE_LIMIT = parseInt(process.env.AUTH_LOGIN_THROTTLE_LIMIT || '10', 10);
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
-  @Throttle({ default: { ttl: 900_000, limit: 10 } })
+  @Throttle({ default: { ttl: 900_000, limit: LOGIN_THROTTLE_LIMIT } })
   @UseGuards(AuthGuard('local'))
   @Post('login')
   @HttpCode(HttpStatus.OK)
