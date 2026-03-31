@@ -1,1 +1,12 @@
 .tmp/
+.claude/
+sessions/
+metadata.json
+
+# If you have local editor files, it's good to ignore them here
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+.vs/

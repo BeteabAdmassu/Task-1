@@ -1,0 +1,8 @@
+export enum VarianceReasonCode {
+  NONE = 'NONE',
+  SHORT_SHIPMENT = 'SHORT_SHIPMENT',
+  OVER_SHIPMENT = 'OVER_SHIPMENT',
+  DAMAGED = 'DAMAGED',
+  WRONG_ITEM = 'WRONG_ITEM',
+  OTHER = 'OTHER',
+}

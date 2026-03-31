@@ -1,0 +1,4 @@
+export enum ReceiptStatus {
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+}

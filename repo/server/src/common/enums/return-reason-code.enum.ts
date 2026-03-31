@@ -1,0 +1,7 @@
+export enum ReturnReasonCode {
+  DAMAGED = 'DAMAGED',
+  WRONG_ITEM = 'WRONG_ITEM',
+  QUALITY_ISSUE = 'QUALITY_ISSUE',
+  OVERSTOCK = 'OVERSTOCK',
+  OTHER = 'OTHER',
+}

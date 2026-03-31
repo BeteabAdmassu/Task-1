@@ -1,0 +1,6 @@
+export enum ArticleCategory {
+  CARE_GUIDE = 'CARE_GUIDE',
+  PEST_TREATMENT_SOP = 'PEST_TREATMENT_SOP',
+  SAFETY_NOTE = 'SAFETY_NOTE',
+  GENERAL = 'GENERAL',
+}

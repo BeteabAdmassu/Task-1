@@ -1,0 +1,6 @@
+export enum ArticleStatus {
+  DRAFT = 'DRAFT',
+  SPECIALIST_ONLY = 'SPECIALIST_ONLY',
+  STOREWIDE = 'STOREWIDE',
+  ARCHIVED = 'ARCHIVED',
+}

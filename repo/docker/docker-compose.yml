@@ -1,0 +1,55 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-greenleaf}
+      POSTGRES_PASSWORD: ${DB_PASS:-greenleaf_secret}
+      POSTGRES_DB: ${DB_NAME:-greenleaf_db}
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-greenleaf} -d ${DB_NAME:-greenleaf_db}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-greenleaf}
+      DB_PASS: ${DB_PASS:-greenleaf_secret}
+      DB_NAME: ${DB_NAME:-greenleaf_db}
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-random-secret}
+      SESSION_TIMEOUT_MINUTES: ${SESSION_TIMEOUT_MINUTES:-30}
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-change-me-to-a-random-32-char-key}
+      API_PORT: 3001
+    ports:
+      - '${API_PORT:-3001}:3001'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../client
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:${API_PORT:-3001}
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
