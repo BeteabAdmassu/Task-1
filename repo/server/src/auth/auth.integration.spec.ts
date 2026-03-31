@@ -51,6 +51,8 @@ import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { SupplierPortalPoController } from '../purchase-orders/supplier-portal-po.controller';
 import { PurchaseOrdersService } from '../purchase-orders/purchase-orders.service';
+import { SupplierPortalReturnsController } from '../returns/supplier-portal-returns.controller';
+import { ReturnsService } from '../returns/returns.service';
 
 // ── Test controllers ──────────────────────────────────────────────────────────
 
@@ -562,6 +564,171 @@ describe('Auth + Authorization — HTTP integration', () => {
         .set('Authorization', `Bearer ${tokenC}`);
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  // ── Supplier portal Returns — real controller object-level isolation ────────
+
+  describe('Supplier portal Returns — real controller object-level isolation', () => {
+    let returnsApp: INestApplication;
+    let returnsJwtService: JwtService;
+
+    const mockReturnsService = {
+      findForSupplier: jest.fn(),
+      findByIdForSupplier: jest.fn(),
+    };
+
+    const mockReturnsUserRepo = {
+      findOne: jest.fn(),
+    };
+
+    beforeAll(async () => {
+      const returnsModule = await Test.createTestingModule({
+        imports: [
+          PassportModule,
+          JwtModule.register({
+            secret: TEST_JWT_SECRET,
+            signOptions: { expiresIn: '15m' },
+          }),
+        ],
+        controllers: [SupplierPortalReturnsController],
+        providers: [
+          JwtStrategy,
+          { provide: ReturnsService, useValue: mockReturnsService },
+          { provide: getRepositoryToken(User), useValue: mockReturnsUserRepo },
+          { provide: APP_GUARD, useClass: JwtAuthGuard },
+          { provide: APP_GUARD, useClass: RolesGuard },
+        ],
+      }).compile();
+
+      returnsApp = returnsModule.createNestApplication();
+      returnsApp.setGlobalPrefix('api');
+      returnsApp.use(cookieParser());
+      await returnsApp.init();
+
+      returnsJwtService = returnsModule.get(JwtService);
+    });
+
+    afterAll(() => returnsApp.close());
+
+    beforeEach(() => jest.clearAllMocks());
+
+    it('supplier A cannot access supplier B return by ID (returns 404)', async () => {
+      mockReturnsUserRepo.findOne.mockResolvedValue({
+        id: 'user-a',
+        supplierId: 'supplier-A',
+        role: Role.SUPPLIER,
+      });
+
+      mockReturnsService.findByIdForSupplier.mockRejectedValue(
+        new NotFoundException('Return authorization not found'),
+      );
+
+      const tokenA = returnsJwtService.sign({
+        sub: 'user-a',
+        username: 'sup-a',
+        role: Role.SUPPLIER,
+      });
+
+      const res = await request(returnsApp.getHttpServer())
+        .get('/api/supplier-portal/returns/ra-belongs-to-B')
+        .set('Authorization', `Bearer ${tokenA}`);
+
+      expect(res.status).toBe(404);
+      expect(mockReturnsService.findByIdForSupplier).toHaveBeenCalledWith(
+        'ra-belongs-to-B',
+        'supplier-A',
+      );
+    });
+
+    it('supplier A can access own return record (returns 200)', async () => {
+      mockReturnsUserRepo.findOne.mockResolvedValue({
+        id: 'user-a',
+        supplierId: 'supplier-A',
+        role: Role.SUPPLIER,
+      });
+
+      mockReturnsService.findByIdForSupplier.mockResolvedValue({
+        id: 'ra-belongs-to-A',
+        supplierId: 'supplier-A',
+        status: 'SUBMITTED',
+      });
+
+      const tokenA = returnsJwtService.sign({
+        sub: 'user-a',
+        username: 'sup-a',
+        role: Role.SUPPLIER,
+      });
+
+      const res = await request(returnsApp.getHttpServer())
+        .get('/api/supplier-portal/returns/ra-belongs-to-A')
+        .set('Authorization', `Bearer ${tokenA}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.supplierId).toBe('supplier-A');
+    });
+
+    it('user with no linked supplier profile gets 404', async () => {
+      mockReturnsUserRepo.findOne.mockResolvedValue({
+        id: 'user-c',
+        supplierId: null,
+        role: Role.SUPPLIER,
+      });
+
+      const tokenC = returnsJwtService.sign({
+        sub: 'user-c',
+        username: 'sup-c',
+        role: Role.SUPPLIER,
+      });
+
+      const res = await request(returnsApp.getHttpServer())
+        .get('/api/supplier-portal/returns/any-ra-id')
+        .set('Authorization', `Bearer ${tokenC}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('non-SUPPLIER role (PROCUREMENT_MANAGER) gets 403', async () => {
+      const tokenPm = returnsJwtService.sign({
+        sub: 'u-pm',
+        username: 'pm',
+        role: Role.PROCUREMENT_MANAGER,
+      });
+
+      const res = await request(returnsApp.getHttpServer())
+        .get('/api/supplier-portal/returns/any-ra-id')
+        .set('Authorization', `Bearer ${tokenPm}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('supplier A list endpoint scopes to their own returns only', async () => {
+      mockReturnsUserRepo.findOne.mockResolvedValue({
+        id: 'user-a',
+        supplierId: 'supplier-A',
+        role: Role.SUPPLIER,
+      });
+
+      mockReturnsService.findForSupplier.mockResolvedValue({
+        data: [],
+        meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      });
+
+      const tokenA = returnsJwtService.sign({
+        sub: 'user-a',
+        username: 'sup-a',
+        role: Role.SUPPLIER,
+      });
+
+      const res = await request(returnsApp.getHttpServer())
+        .get('/api/supplier-portal/returns')
+        .set('Authorization', `Bearer ${tokenA}`);
+
+      expect(res.status).toBe(200);
+      expect(mockReturnsService.findForSupplier).toHaveBeenCalledWith(
+        'supplier-A',
+        expect.anything(),
+      );
     });
   });
 });

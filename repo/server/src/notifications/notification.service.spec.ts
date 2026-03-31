@@ -259,6 +259,113 @@ describe('NotificationService — drainQueue transactional safety', () => {
   });
 });
 
+// ── Emit throttle boundary conditions ────────────────────────────────────────
+
+describe('NotificationService — emit throttle boundaries', () => {
+  let service: NotificationService;
+
+  let notifRepo: ReturnType<typeof makeRepo>;
+  let prefRepo: ReturnType<typeof makeRepo>;
+  let throttleRepo: ReturnType<typeof makeRepo>;
+
+  const dataSource = { transaction: jest.fn() };
+
+  beforeEach(async () => {
+    notifRepo = makeRepo();
+    prefRepo = makeRepo();
+    throttleRepo = makeRepo();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        NotificationService,
+        { provide: getRepositoryToken(Notification), useValue: notifRepo },
+        { provide: getRepositoryToken(NotificationPreference), useValue: prefRepo },
+        { provide: getRepositoryToken(NotificationThrottle), useValue: throttleRepo },
+        { provide: DataSource, useValue: dataSource },
+      ],
+    }).compile();
+
+    service = module.get<NotificationService>(NotificationService);
+    jest.clearAllMocks();
+  });
+
+  it('19 recent notifications — 20th emit is still delivered (not queued)', async () => {
+    // Preference: not suppressed
+    prefRepo.findOne.mockResolvedValue(null);
+    // 19 delivered in the window → under limit
+    notifRepo._qb.getCount.mockResolvedValue(19);
+    // No queued to deliver
+    notifRepo.find.mockResolvedValue([]);
+
+    await service.emit('u1', 'SYSTEM_ALERT' as any, 'T', 'msg');
+
+    // Should save with isQueued = false
+    expect(notifRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ isQueued: false }),
+    );
+    // Should NOT log a throttle event
+    expect(throttleRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('20 recent notifications — 21st emit is queued', async () => {
+    prefRepo.findOne.mockResolvedValue(null);
+    // 20 delivered in the window → at limit
+    notifRepo._qb.getCount.mockResolvedValue(20);
+
+    await service.emit('u1', 'SYSTEM_ALERT' as any, 'T', 'msg');
+
+    // Should save with isQueued = true
+    expect(notifRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ isQueued: true }),
+    );
+    // Should log a throttle event
+    expect(throttleRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u1' }),
+    );
+  });
+
+  it('21+ recent notifications — further emits remain queued', async () => {
+    prefRepo.findOne.mockResolvedValue(null);
+    // 25 delivered in the window → well over limit
+    notifRepo._qb.getCount.mockResolvedValue(25);
+
+    await service.emit('u1', 'SYSTEM_ALERT' as any, 'T', 'msg');
+
+    expect(notifRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ isQueued: true }),
+    );
+    expect(throttleRepo.save).toHaveBeenCalled();
+  });
+
+  it('when not queued, calls deliverQueued to promote any pending items', async () => {
+    prefRepo.findOne.mockResolvedValue(null);
+    // 18 recent → room for 2 more, emit adds 1 → 19 total → capacity = 1
+    notifRepo._qb.getCount.mockResolvedValue(18);
+    // One queued notification waiting
+    notifRepo.find.mockResolvedValue([makeNotification({ id: 'q1', isQueued: true })]);
+
+    await service.emit('u1', 'SYSTEM_ALERT' as any, 'T', 'msg');
+
+    // Should save with isQueued = false (not throttled)
+    expect(notifRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ isQueued: false }),
+    );
+    // Should promote the queued notification (execute the update query)
+    expect(notifRepo._execute).toHaveBeenCalled();
+  });
+
+  it('when throttled, does NOT attempt to deliver queued items', async () => {
+    prefRepo.findOne.mockResolvedValue(null);
+    notifRepo._qb.getCount.mockResolvedValue(20); // at limit → queued
+
+    await service.emit('u1', 'SYSTEM_ALERT' as any, 'T', 'msg');
+
+    // The find() for queued items should not be called when isQueued = true
+    // because deliverQueued is only called when !isQueued
+    expect(notifRepo.find).not.toHaveBeenCalled();
+  });
+});
+
 // ── Scheduler integration — verify transaction wrapping ──────────────────────
 
 describe('SchedulerService — notification-queue-drain uses transaction', () => {
