@@ -69,14 +69,19 @@ export class DataQualityService {
    * atomically on failure.
    */
   async checkForDuplicates(
-    entityType: 'Supplier' | 'Article',
+    entityType: 'Supplier' | 'Article' | 'CatalogItem',
     id: string,
     fingerprint: string,
     manager?: EntityManager,
   ): Promise<void> {
     if (!fingerprint) return;
 
-    const table = entityType === 'Supplier' ? 'suppliers' : 'articles';
+    const tableMap: Record<string, string> = {
+      Supplier: 'suppliers',
+      Article: 'articles',
+      CatalogItem: 'catalog_items',
+    };
+    const table = tableMap[entityType];
     const db = manager ?? this.dataSource;
     const dupRepo = manager
       ? manager.getRepository(DuplicateCandidate)
@@ -152,6 +157,8 @@ export class DataQualityService {
         await this.mergeSuppliers(manager, primaryId, secondaryId);
       } else if (candidate.entityType === 'Article') {
         await this.mergeArticles(manager, primaryId, secondaryId);
+      } else if (candidate.entityType === 'CatalogItem') {
+        await this.mergeCatalogItems(manager, primaryId, secondaryId);
       }
 
       // Record the mapping
@@ -240,6 +247,24 @@ export class DataQualityService {
     await manager.query(`UPDATE articles SET status = 'ARCHIVED' WHERE id = $1`, [secondaryId]);
   }
 
+  private async mergeCatalogItems(
+    manager: EntityManager,
+    primaryId: string,
+    secondaryId: string,
+  ): Promise<void> {
+    // Rewire purchase-order and purchase-request line items that reference the catalog item
+    await manager.query(
+      `UPDATE purchase_order_line_items SET "catalogItemId" = $1 WHERE "catalogItemId" = $2`,
+      [primaryId, secondaryId],
+    );
+    await manager.query(
+      `UPDATE purchase_request_line_items SET "catalogItemId" = $1 WHERE "catalogItemId" = $2`,
+      [primaryId, secondaryId],
+    );
+    // Deactivate secondary
+    await manager.query(`UPDATE catalog_items SET "isActive" = false WHERE id = $1`, [secondaryId]);
+  }
+
   // ── Dismiss ───────────────────────────────────────────────────────────────
 
   async dismissDuplicate(candidateId: string, adminId: string): Promise<void> {
@@ -281,11 +306,18 @@ export class DataQualityService {
     const candidate = await this.dupRepo.findOne({ where: { id } });
     if (!candidate) throw new NotFoundException('Duplicate candidate not found');
 
-    const table = candidate.entityType === 'Supplier' ? 'suppliers' : 'articles';
-    const columns =
-      candidate.entityType === 'Supplier'
-        ? 'id, name, "contactName", email, phone, address, "paymentTerms", "isActive", fingerprint'
-        : 'id, title, slug, category, status, tags, fingerprint, "updatedAt"';
+    const tableMap: Record<string, string> = {
+      Supplier: 'suppliers',
+      Article: 'articles',
+      CatalogItem: 'catalog_items',
+    };
+    const columnsMap: Record<string, string> = {
+      Supplier: 'id, name, "contactName", email, phone, address, "paymentTerms", "isActive", fingerprint',
+      Article: 'id, title, slug, category, status, tags, fingerprint, "updatedAt"',
+      CatalogItem: 'id, title, "supplierId", "unitSize", upc, "unitPrice", "isActive", fingerprint',
+    };
+    const table = tableMap[candidate.entityType] ?? 'suppliers';
+    const columns = columnsMap[candidate.entityType] ?? 'id, fingerprint';
 
     const [source] = await this.dataSource.query(
       `SELECT ${columns} FROM ${table} WHERE id = $1`,
@@ -424,6 +456,7 @@ export class DataQualityService {
 
     let supplierCount = 0;
     let articleCount = 0;
+    let catalogCount = 0;
 
     await this.dataSource.transaction(async (manager) => {
       // Scan suppliers that have a fingerprint
@@ -443,10 +476,19 @@ export class DataQualityService {
       for (const a of articles) {
         await this.checkForDuplicates('Article', a.id, a.fingerprint, manager);
       }
+
+      // Scan catalog items that have a fingerprint
+      const catalogItems: Array<{ id: string; fingerprint: string }> = await manager.query(
+        `SELECT id, fingerprint FROM catalog_items WHERE fingerprint IS NOT NULL AND "isActive" = true`,
+      );
+      catalogCount = catalogItems.length;
+      for (const c of catalogItems) {
+        await this.checkForDuplicates('CatalogItem', c.id, c.fingerprint, manager);
+      }
     });
 
     this.logger.log(
-      `Dedup scan complete: checked ${supplierCount} suppliers, ${articleCount} articles.`,
+      `Dedup scan complete: checked ${supplierCount} suppliers, ${articleCount} articles, ${catalogCount} catalog items.`,
     );
   }
 

@@ -69,12 +69,11 @@ export class KnowledgeBaseService {
     }
     if (userRole === Role.PLANT_CARE_SPECIALIST) {
       qb.andWhere(
-        '(a.status = :storewide OR a.status = :specialist OR (a.status = :draft AND a.authorId = :uid))',
+        '(a.status = :storewide OR a.status = :specialist OR a.status = :draft)',
         {
           storewide: ArticleStatus.STOREWIDE,
           specialist: ArticleStatus.SPECIALIST_ONLY,
           draft: ArticleStatus.DRAFT,
-          uid: userId,
         },
       );
       return;
@@ -92,7 +91,11 @@ export class KnowledgeBaseService {
     if (article.status === ArticleStatus.STOREWIDE) return true;
     if (article.status === ArticleStatus.SPECIALIST_ONLY && userRole === Role.PLANT_CARE_SPECIALIST)
       return true;
-    if (article.status === ArticleStatus.DRAFT && article.authorId === userId) return true;
+    if (article.status === ArticleStatus.DRAFT) {
+      // Specialists can view all drafts (phased-release collaboration);
+      // other roles can only view their own drafts.
+      return userRole === Role.PLANT_CARE_SPECIALIST || article.authorId === userId;
+    }
     return false;
   }
 

@@ -239,4 +239,73 @@ describe('KnowledgeBaseService – specialist authoring & authorization', () => 
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  // ── Draft visibility (phased-release) ────────────────────────────────────
+
+  describe('DRAFT article visibility — phased release', () => {
+    beforeEach(() => {
+      // Restore the real findById so visibility logic is exercised
+      (service.findById as jest.Mock).mockRestore?.();
+    });
+
+    it('Specialist A can read Specialist B draft article', async () => {
+      const otherSpecialistDraft = makeMockArticle({
+        status: ArticleStatus.DRAFT,
+        authorId: OTHER_USER_ID,
+      });
+      mockArticleRepo.findOne.mockResolvedValue(otherSpecialistDraft);
+
+      const result = await service.findById(ARTICLE_ID, SPECIALIST_ID, Role.PLANT_CARE_SPECIALIST);
+      expect(result).toEqual(otherSpecialistDraft);
+    });
+
+    it('WAREHOUSE_CLERK cannot read another user draft article', async () => {
+      const otherDraft = makeMockArticle({
+        status: ArticleStatus.DRAFT,
+        authorId: OTHER_USER_ID,
+      });
+      mockArticleRepo.findOne.mockResolvedValue(otherDraft);
+
+      await expect(
+        service.findById(ARTICLE_ID, 'warehouse-clerk-id', Role.WAREHOUSE_CLERK),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('PROCUREMENT_MANAGER cannot read another user draft article', async () => {
+      const otherDraft = makeMockArticle({
+        status: ArticleStatus.DRAFT,
+        authorId: OTHER_USER_ID,
+      });
+      mockArticleRepo.findOne.mockResolvedValue(otherDraft);
+
+      await expect(
+        service.findById(ARTICLE_ID, 'pm-id', Role.PROCUREMENT_MANAGER),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('Specialist can still read their own draft', async () => {
+      const ownDraft = makeMockArticle({
+        status: ArticleStatus.DRAFT,
+        authorId: SPECIALIST_ID,
+      });
+      mockArticleRepo.findOne.mockResolvedValue(ownDraft);
+
+      const result = await service.findById(ARTICLE_ID, SPECIALIST_ID, Role.PLANT_CARE_SPECIALIST);
+      expect(result).toEqual(ownDraft);
+    });
+
+    it('promotion to STOREWIDE makes article visible to all roles', async () => {
+      const storewideArticle = makeMockArticle({
+        status: ArticleStatus.STOREWIDE,
+        authorId: OTHER_USER_ID,
+      });
+      mockArticleRepo.findOne.mockResolvedValue(storewideArticle);
+
+      const specResult = await service.findById(ARTICLE_ID, SPECIALIST_ID, Role.PLANT_CARE_SPECIALIST);
+      expect(specResult).toEqual(storewideArticle);
+
+      const clerkResult = await service.findById(ARTICLE_ID, 'clerk-id', Role.WAREHOUSE_CLERK);
+      expect(clerkResult).toEqual(storewideArticle);
+    });
+  });
 });
