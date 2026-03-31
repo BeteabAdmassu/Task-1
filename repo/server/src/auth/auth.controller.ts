@@ -67,7 +67,7 @@ export class AuthController {
       path: '/api/auth',
     });
 
-    return result;
+    return { accessToken: result.accessToken, user: result.user };
   }
 
   @Public()

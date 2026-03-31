@@ -49,6 +49,8 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
 import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
+import { SupplierPortalPoController } from '../purchase-orders/supplier-portal-po.controller';
+import { PurchaseOrdersService } from '../purchase-orders/purchase-orders.service';
 
 // ── Test controllers ──────────────────────────────────────────────────────────
 
@@ -274,6 +276,7 @@ describe('Auth + Authorization — HTTP integration', () => {
     it('returns 200 with new accessToken when refresh cookie is valid', async () => {
       mockAuthService.refresh.mockResolvedValue({
         accessToken: 'new-access-token',
+        refreshToken: 'new-rotated-refresh-token',
         user: {
           id: 'u-pm',
           username: 'alice',
@@ -288,6 +291,8 @@ describe('Auth + Authorization — HTTP integration', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.accessToken).toBe('new-access-token');
+      // Rotated refresh token must be in the HttpOnly cookie only — never in the response body
+      expect(res.body.refreshToken).toBeUndefined();
     });
 
     it('returns 401 when no refresh cookie is present', async () => {
@@ -426,6 +431,135 @@ describe('Auth + Authorization — HTTP integration', () => {
       const res = await request(app.getHttpServer())
         .get('/api/test-isolation/supplier-A')
         .set('Authorization', `Bearer ${tokenB}`);
+
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // ── Supplier portal PO object-level isolation (real controller) ─────────────
+
+  describe('Supplier portal PO — real controller object-level isolation', () => {
+    let poApp: INestApplication;
+    let poJwtService: JwtService;
+
+    const mockPoService = {
+      findForSupplier: jest.fn(),
+      findByIdForSupplier: jest.fn(),
+    };
+
+    const mockPoUserRepo = {
+      findOne: jest.fn(),
+    };
+
+    beforeAll(async () => {
+      const poModule = await Test.createTestingModule({
+        imports: [
+          PassportModule,
+          JwtModule.register({
+            secret: TEST_JWT_SECRET,
+            signOptions: { expiresIn: '15m' },
+          }),
+        ],
+        controllers: [SupplierPortalPoController],
+        providers: [
+          JwtStrategy,
+          { provide: PurchaseOrdersService, useValue: mockPoService },
+          { provide: getRepositoryToken(User), useValue: mockPoUserRepo },
+          { provide: APP_GUARD, useClass: JwtAuthGuard },
+          { provide: APP_GUARD, useClass: RolesGuard },
+        ],
+      }).compile();
+
+      poApp = poModule.createNestApplication();
+      poApp.setGlobalPrefix('api');
+      poApp.use(cookieParser());
+      await poApp.init();
+
+      poJwtService = poModule.get(JwtService);
+    });
+
+    afterAll(() => poApp.close());
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('supplier A cannot access supplier B\'s PO (returns 404)', async () => {
+      // user-a is linked to supplier-A
+      mockPoUserRepo.findOne.mockResolvedValue({
+        id: 'user-a',
+        supplierId: 'supplier-A',
+        role: Role.SUPPLIER,
+      });
+
+      // Service throws 404 because the PO belongs to supplier-B, not supplier-A
+      mockPoService.findByIdForSupplier.mockRejectedValue(
+        new NotFoundException('Purchase order not found'),
+      );
+
+      const tokenA = poJwtService.sign({ sub: 'user-a', username: 'sup-a', role: Role.SUPPLIER });
+
+      const res = await request(poApp.getHttpServer())
+        .get('/api/supplier-portal/purchase-orders/po-belongs-to-B')
+        .set('Authorization', `Bearer ${tokenA}`);
+
+      expect(res.status).toBe(404);
+      // Confirm the service was called with supplier-A's id, not supplier-B's
+      expect(mockPoService.findByIdForSupplier).toHaveBeenCalledWith(
+        'po-belongs-to-B',
+        'supplier-A',
+      );
+    });
+
+    it('supplier A can access their own PO (returns 200)', async () => {
+      mockPoUserRepo.findOne.mockResolvedValue({
+        id: 'user-a',
+        supplierId: 'supplier-A',
+        role: Role.SUPPLIER,
+      });
+
+      mockPoService.findByIdForSupplier.mockResolvedValue({
+        id: 'po-belongs-to-A',
+        supplierId: 'supplier-A',
+        status: 'PENDING',
+      });
+
+      const tokenA = poJwtService.sign({ sub: 'user-a', username: 'sup-a', role: Role.SUPPLIER });
+
+      const res = await request(poApp.getHttpServer())
+        .get('/api/supplier-portal/purchase-orders/po-belongs-to-A')
+        .set('Authorization', `Bearer ${tokenA}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.supplierId).toBe('supplier-A');
+    });
+
+    it('non-SUPPLIER role (PROCUREMENT_MANAGER) cannot access supplier portal PO endpoint (403)', async () => {
+      const tokenPm = poJwtService.sign({
+        sub: 'u-pm',
+        username: 'pm',
+        role: Role.PROCUREMENT_MANAGER,
+      });
+
+      const res = await request(poApp.getHttpServer())
+        .get('/api/supplier-portal/purchase-orders/any-po-id')
+        .set('Authorization', `Bearer ${tokenPm}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('user with no linked supplier gets 404 when accessing any PO', async () => {
+      mockPoUserRepo.findOne.mockResolvedValue({
+        id: 'user-c',
+        supplierId: null,
+        role: Role.SUPPLIER,
+      });
+
+      const tokenC = poJwtService.sign({ sub: 'user-c', username: 'sup-c', role: Role.SUPPLIER });
+
+      const res = await request(poApp.getHttpServer())
+        .get('/api/supplier-portal/purchase-orders/some-po-id')
+        .set('Authorization', `Bearer ${tokenC}`);
 
       expect(res.status).toBe(404);
     });

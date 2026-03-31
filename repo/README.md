@@ -51,6 +51,15 @@ ADMIN_BOOTSTRAP_PASSWORD=ChangeMe!2024
 # API
 API_PORT=3001
 CORS_ORIGIN=http://localhost:3000
+
+# Field encryption — required for supplier sensitive fields (bankingNotes, internalRiskFlag)
+FIELD_ENCRYPTION_KEY=replace-with-a-64-char-hex-string
+```
+
+Generate a strong key:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
 > **Security:** `ADMIN_BOOTSTRAP_PASSWORD` is used exactly once to seed the initial
@@ -214,6 +223,7 @@ repo/
 | `CORS_ORIGIN` | `http://localhost:5173` | Allowed frontend origin |
 | `ADMIN_BOOTSTRAP_USERNAME` | `admin` | Initial admin username (one-time) |
 | `ADMIN_BOOTSTRAP_PASSWORD` | *(none)* | Initial admin password (one-time) |
+| `FIELD_ENCRYPTION_KEY` | **required** | 32-byte hex key for AES-256-GCM encryption of supplier `bankingNotes` and `internalRiskFlag` fields |
 | `NODE_ENV` | — | Set to `production` to enable secure cookies |
 
 ---
