@@ -379,22 +379,66 @@ export class ProcurementService {
     };
   }
 
-  // Placeholder for low-stock alert integration
-  async createFromStockAlert(alertData: {
-    title: string;
-    supplierId?: string;
-    items: { description: string; quantity: number; unitPrice: number }[];
-    requestedBy: string;
-  }): Promise<PurchaseRequest> {
-    const dto: CreateRequestDto = {
-      title: alertData.title,
-      supplierId: alertData.supplierId,
-      lineItems: alertData.items.map((item) => ({
+  // ── Low-stock alert ingest ────────────────────────────────────────────────
+
+  async ingestLowStockAlert(
+    dto: {
+      title: string;
+      supplierId?: string;
+      items: { description: string; quantity: number; unitPrice: number }[];
+      notes?: string;
+    },
+    requestedBy: string,
+  ): Promise<PurchaseRequest> {
+    if (!dto.items || dto.items.length === 0) {
+      throw new BadRequestException('Low-stock alert must include at least one item');
+    }
+
+    const createDto: CreateRequestDto = {
+      title: dto.title,
+      supplierId: dto.supplierId,
+      description: dto.notes
+        ? `[Low-Stock Alert] ${dto.notes}`
+        : '[Low-Stock Alert] Automatically generated from stock monitoring',
+      lineItems: dto.items.map((item) => ({
         itemDescription: item.description,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
       })),
     };
-    return this.create(dto, alertData.requestedBy);
+
+    const request = await this.create(createDto, requestedBy);
+    const submitted = await this.submit(request.id, requestedBy);
+
+    await this.auditService.log(
+      requestedBy,
+      AuditAction.STOCK_ALERT_INGESTED,
+      'PurchaseRequest',
+      submitted.id,
+      {
+        requestNumber: submitted.requestNumber,
+        totalAmount: submitted.totalAmount,
+        itemCount: dto.items.length,
+        source: 'low-stock-alert',
+      },
+    );
+
+    // Notify all procurement managers
+    const managers: Array<{ id: string }> = await this.dataSource.query(
+      `SELECT id FROM users WHERE role = 'PROCUREMENT_MANAGER' AND "isActive" = true`,
+    );
+    for (const mgr of managers) {
+      await this.notificationService.emit(
+        mgr.id,
+        NotificationType.SYSTEM_ALERT,
+        'Low-Stock Alert: New Purchase Request',
+        `A low-stock alert created request ${submitted.requestNumber} for ${dto.items.length} ` +
+          `item(s) totalling $${submitted.totalAmount}. ` +
+          `${submitted.status === 'APPROVED' ? 'Auto-approved.' : 'Awaiting approval.'}`,
+        { type: 'PurchaseRequest', id: submitted.id },
+      );
+    }
+
+    return submitted;
   }
 }

@@ -15,6 +15,7 @@ import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { Public } from '../common/decorators/public.decorator';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -79,5 +80,13 @@ export class AuthController {
     }
     res.clearCookie('refresh_token', { path: '/api/auth' });
     return { message: 'Logged out' };
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(@Body() dto: ChangePasswordDto, @Req() req: Request) {
+    const userId = (req.user as { id: string }).id;
+    await this.authService.changePassword(userId, dto.currentPassword, dto.newPassword);
+    return { message: 'Password changed successfully' };
   }
 }

@@ -38,12 +38,16 @@ import { DataQualityDashboard } from './pages/DataQualityDashboard';
 import { DuplicateReview } from './pages/DuplicateReview';
 import { ObservabilityDashboard } from './pages/ObservabilityDashboard';
 import { Unauthorized } from './pages/Unauthorized';
+import { ChangePassword } from './pages/ChangePassword';
 import { useAuth } from './contexts/AuthContext';
 import { getRoleRedirectPath } from './utils/roles';
 
 function RoleRedirect() {
   const { user } = useAuth();
   if (user) {
+    if (user.mustChangePassword) {
+      return <Navigate to="/change-password" replace />;
+    }
     return <Navigate to={getRoleRedirectPath(user.role)} replace />;
   }
   return <Dashboard />;
@@ -54,6 +58,14 @@ export function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
+      <Route
+        path="/change-password"
+        element={
+          <ProtectedRoute>
+            <ChangePassword forced />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/"
         element={

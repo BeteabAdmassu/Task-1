@@ -3,12 +3,38 @@ import {
   AuthUser,
   login as apiLogin,
   logout as apiLogout,
-  refreshToken,
   setAccessToken,
 } from '../api/auth';
 
+// ── Service worker cache helpers ─────────────────────────────────────────────
+
+function swPostMessage(msg: Record<string, unknown>): void {
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage(msg);
+  }
+}
+
+function swClearCache(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+      resolve();
+      return;
+    }
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => resolve();
+    navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_CACHE' }, [channel.port2]);
+    setTimeout(resolve, 300);
+  });
+}
+
+// ── Context ──────────────────────────────────────────────────────────────────
+
+export interface AuthUserExtended extends AuthUser {
+  mustChangePassword?: boolean;
+}
+
 interface AuthContextType {
-  user: AuthUser | null;
+  user: AuthUserExtended | null;
   loading: boolean;
   error: string | null;
   login: (username: string, password: string) => Promise<void>;
@@ -19,28 +45,20 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<AuthUserExtended | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Try to restore session on mount
   useEffect(() => {
-    refreshToken()
-      .then((ok) => {
-        if (!ok) {
-          setUser(null);
+    fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { accessToken: string; user: AuthUserExtended } | null) => {
+        if (data) {
+          setAccessToken(data.accessToken);
+          setUser(data.user);
+          swPostMessage({ type: 'SET_USER', userId: data.user.id });
         }
-        // If refresh succeeded, we need the user info — do another refresh that returns user
-        return ok
-          ? fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
-              .then((r) => (r.ok ? r.json() : null))
-              .then((data) => {
-                if (data) {
-                  setAccessToken(data.accessToken);
-                  setUser(data.user);
-                }
-              })
-          : undefined;
       })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
@@ -50,7 +68,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const result = await apiLogin(username, password);
-      setUser(result.user);
+      const userData = result.user as AuthUserExtended;
+      setUser(userData);
+      swPostMessage({ type: 'SET_USER', userId: userData.id });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);
@@ -59,6 +79,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Wipe SW cache before clearing server session so stale protected data is gone
+    await swClearCache();
     await apiLogout();
     setUser(null);
   }, []);

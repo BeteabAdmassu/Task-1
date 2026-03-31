@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { Session } from './session.entity';
+import { User } from '../users/user.entity';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -17,7 +18,7 @@ import { UsersModule } from '../users/users.module';
       secret: process.env.JWT_SECRET || 'change-me-to-a-random-secret',
       signOptions: { expiresIn: '15m' },
     }),
-    TypeOrmModule.forFeature([Session]),
+    TypeOrmModule.forFeature([Session, User]),
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy],

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
@@ -18,6 +18,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     @InjectRepository(Session)
     private readonly sessionsRepository: Repository<Session>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
   ) {}
 
   async validateUser(username: string, password: string): Promise<User> {
@@ -54,6 +56,7 @@ export class AuthService {
         id: user.id,
         username: user.username,
         role: user.role,
+        mustChangePassword: user.mustChangePassword,
       },
     };
   }
@@ -91,8 +94,34 @@ export class AuthService {
         id: user.id,
         username: user.username,
         role: user.role,
+        mustChangePassword: user.mustChangePassword,
       },
     };
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) throw new BadRequestException('Current password is incorrect');
+
+    if (currentPassword === newPassword) {
+      throw new BadRequestException('New password must differ from current password');
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await this.usersRepository.update(userId, {
+      passwordHash: newHash,
+      mustChangePassword: false,
+    });
+
+    // Invalidate all existing sessions except the current one so other devices are logged out
+    await this.sessionsRepository.delete({ userId });
   }
 
   async logout(refreshToken: string): Promise<void> {
