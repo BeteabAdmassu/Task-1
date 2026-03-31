@@ -169,7 +169,29 @@ async function main() {
       console.log(`  created PO: ${poNumber}`);
     }
 
-    // ── 5. Knowledge Base Article ─────────────────────────────────────────────
+    // ── 5. Catalog Items ──────────────────────────────────────────────────────
+    const existingCatalog = await qr.query(
+      `SELECT id FROM catalog_items WHERE title = 'Premium Potting Mix (20 L bag)'`,
+    );
+    if (existingCatalog.length === 0) {
+      const fp1 = 'premium potting mix 20 l bag|' + supplierId + '|20l';
+      await qr.query(
+        `INSERT INTO catalog_items (title, "supplierId", "unitSize", upc, "unitPrice", description, fingerprint)
+         VALUES ($1, $2, '20L', '012345678901', 20.00, 'High-quality potting mix for greenhouse use.', $3)`,
+        ['Premium Potting Mix (20 L bag)', supplierId, fp1],
+      );
+      const fp2 = 'npk fertilizer 10kg|' + supplierId + '|10kg';
+      await qr.query(
+        `INSERT INTO catalog_items (title, "supplierId", "unitSize", "unitPrice", description, fingerprint)
+         VALUES ($1, $2, '10kg', 15.00, 'General-purpose NPK fertilizer.', $3)`,
+        ['NPK Fertilizer 10kg', supplierId, fp2],
+      );
+      console.log('  created 2 catalog items');
+    } else {
+      console.log('  skip catalog items (already exist)');
+    }
+
+    // ── 6. Knowledge Base Article ────────────────────────────────────────────
     const existingArticle = await qr.query(
       `SELECT id FROM articles WHERE title = 'Demo: Caring for Tropical Houseplants'`,
     );
@@ -191,7 +213,7 @@ async function main() {
       console.log('  skip article (already exists)');
     }
 
-    // ── 6. Notifications ──────────────────────────────────────────────────────
+    // ── 7. Notifications ──────────────────────────────────────────────────────
     if (userIds['demo_pm']) {
       await qr.query(
         `INSERT INTO notifications

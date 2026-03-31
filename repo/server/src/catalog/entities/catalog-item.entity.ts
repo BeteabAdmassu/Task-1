@@ -24,10 +24,10 @@ export class CatalogItem {
   @JoinColumn({ name: 'supplierId' })
   supplier: Supplier | null;
 
-  @Column({ length: 100, nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
   unitSize: string | null;
 
-  @Column({ length: 50, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   upc: string | null;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
