@@ -126,11 +126,10 @@ describe('Supplier portal smoke flow', () => {
     await waitFor(() => screen.getByLabelText(/username/i));
 
     // Fill in credentials and submit
-    await act(async () => {
-      await userEvent.type(screen.getByLabelText(/username/i), 'acme_supplier');
-      await userEvent.type(screen.getByLabelText(/password/i), 'password1');
-      await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
-    });
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/username/i), 'acme_supplier');
+    await user.type(screen.getByLabelText(/password/i), 'password1');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     // Should navigate to /supplier-portal and render the portal heading
     await waitFor(() =>
@@ -163,11 +162,10 @@ describe('Supplier portal smoke flow', () => {
 
     await waitFor(() => screen.getByLabelText(/username/i));
 
-    await act(async () => {
-      await userEvent.type(screen.getByLabelText(/username/i), 'admin');
-      await userEvent.type(screen.getByLabelText(/password/i), 'adminpass');
-      await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
-    });
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/username/i), 'admin');
+    await user.type(screen.getByLabelText(/password/i), 'adminpass');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     // ADMINISTRATOR redirects to /admin, NOT /supplier-portal
     await waitFor(() =>

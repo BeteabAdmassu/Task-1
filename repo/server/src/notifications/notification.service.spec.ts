@@ -366,6 +366,53 @@ describe('NotificationService — emit throttle boundaries', () => {
   });
 });
 
+// ── markRead / burst behaviour ───────────────────────────────────────────────
+
+describe('NotificationService — markRead', () => {
+  let service: NotificationService;
+  let notifRepo: ReturnType<typeof makeRepo>;
+
+  beforeEach(async () => {
+    notifRepo = makeRepo();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        NotificationService,
+        { provide: getRepositoryToken(Notification), useValue: notifRepo },
+        { provide: getRepositoryToken(NotificationPreference), useValue: makeRepo() },
+        { provide: getRepositoryToken(NotificationThrottle), useValue: makeRepo() },
+        { provide: DataSource, useValue: { transaction: jest.fn() } },
+      ],
+    }).compile();
+    service = module.get<NotificationService>(NotificationService);
+    jest.clearAllMocks();
+  });
+
+  it('marks an unread notification as read and sets readAt', async () => {
+    const notif = makeNotification({ id: 'n1', isRead: false, isQueued: false, recipientId: 'u1' });
+    (notifRepo.findOne as jest.Mock).mockResolvedValue(notif);
+    (notifRepo.findOneOrFail as jest.Mock).mockResolvedValue({ ...notif, isRead: true, readAt: new Date() });
+
+    const result = await service.markRead('n1', 'u1');
+    expect(notifRepo.update).toHaveBeenCalledWith('n1', expect.objectContaining({ isRead: true }));
+    expect(result).toBeDefined();
+  });
+
+  it('skips update when notification is already read', async () => {
+    const notif = makeNotification({ id: 'n1', isRead: true, isQueued: false, recipientId: 'u1' });
+    (notifRepo.findOne as jest.Mock).mockResolvedValue(notif);
+    (notifRepo.findOneOrFail as jest.Mock).mockResolvedValue(notif);
+
+    await service.markRead('n1', 'u1');
+    expect(notifRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('throws when notification does not belong to user', async () => {
+    (notifRepo.findOne as jest.Mock).mockResolvedValue(null);
+
+    await expect(service.markRead('n1', 'wrong-user')).rejects.toThrow();
+  });
+});
+
 // ── Scheduler integration — verify transaction wrapping ──────────────────────
 
 describe('SchedulerService — notification-queue-drain uses transaction', () => {

@@ -82,6 +82,8 @@ function renderForm() {
 
 describe('ReceivingForm — entry mode', () => {
   beforeEach(() => {
+    // Both ISSUED and PARTIALLY_RECEIVED calls return the same PO
+    // to exercise the deduplication logic.
     mockFetchPos.mockResolvedValue({
       data: [samplePo],
       meta: { page: 1, limit: 100, total: 1, totalPages: 1 },
@@ -233,9 +235,8 @@ describe('ReceivingForm — entry mode', () => {
     await waitFor(() => screen.getByRole('button', { name: /complete receiving/i }));
 
     // Submit
-    await act(async () => {
-      await userEvent.click(screen.getByRole('button', { name: /complete receiving/i }));
-    });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /complete receiving/i }));
 
     await waitFor(() => {
       expect(mockCreateReceipt).toHaveBeenCalledWith(
@@ -256,15 +257,37 @@ describe('ReceivingForm — entry mode', () => {
 
     await waitFor(() => screen.getByRole('button', { name: /complete receiving/i }));
 
-    await act(async () => {
-      await userEvent.click(screen.getByRole('button', { name: /complete receiving/i }));
-    });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /complete receiving/i }));
 
     await waitFor(() => {
       expect(mockCreateReceipt).toHaveBeenCalledWith(
         expect.objectContaining({ entryMode: 'MANUAL' }),
       );
     });
+  });
+
+  it('deduplicates POs when same id appears in ISSUED and PARTIALLY_RECEIVED results', async () => {
+    // Both fetches return the same PO — dedup should produce exactly one <option>
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderForm();
+
+    await waitFor(() => screen.getByRole('combobox'));
+
+    // Count <option> elements (first is the placeholder "— Select a PO —")
+    const options = screen.getByRole('combobox').querySelectorAll('option');
+    const poOptions = Array.from(options).filter((o) => o.value && o.value !== '');
+    expect(poOptions).toHaveLength(1);
+    expect(poOptions[0].value).toBe('po-1');
+
+    // No duplicate key warning should have been emitted
+    const dupKeyWarnings = consoleSpy.mock.calls.filter(
+      (args) => typeof args[0] === 'string' && args[0].includes('same key'),
+    );
+    expect(dupKeyWarnings).toHaveLength(0);
+
+    consoleSpy.mockRestore();
   });
 
   it('shows variance reason selector for lines with variance', async () => {

@@ -57,7 +57,16 @@ export function ReceivingForm() {
       fetchPos({ status: 'PARTIALLY_RECEIVED', limit: '100' }),
       fetchPutawayLocations(),
     ]).then(([issued, partial, locs]) => {
-      setPos([...issued.data, ...partial.data]);
+      // Deduplicate by PO id — a PO may appear in both ISSUED and
+      // PARTIALLY_RECEIVED results if its status changed between requests.
+      const combined = [...issued.data, ...partial.data];
+      const seen = new Set<string>();
+      const unique = combined.filter((po) => {
+        if (seen.has(po.id)) return false;
+        seen.add(po.id);
+        return true;
+      });
+      setPos(unique);
       setLocations(locs);
     }).catch((err) => setError(err.message));
   }, []);

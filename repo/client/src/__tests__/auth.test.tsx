@@ -93,9 +93,8 @@ describe('AuthContext', () => {
     renderWithProvider();
     await waitFor(() => screen.getByText('Login'));
 
-    await act(async () => {
-      await userEvent.click(screen.getByText('Login'));
-    });
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Login'));
 
     await waitFor(() => expect(screen.getByTestId('must-change')).toHaveTextContent('true'));
   });
@@ -115,9 +114,8 @@ describe('AuthContext', () => {
     renderWithProvider();
     await waitFor(() => screen.getByTestId('username'));
 
-    await act(async () => {
-      await userEvent.click(screen.getByText('Logout'));
-    });
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Logout'));
 
     await waitFor(() => expect(screen.getByText('Login')).toBeInTheDocument());
   });
@@ -133,13 +131,8 @@ describe('AuthContext', () => {
     renderWithProvider();
     await waitFor(() => screen.getByText('Login'));
 
-    await act(async () => {
-      try {
-        await userEvent.click(screen.getByText('Login'));
-      } catch {
-        // expected
-      }
-    });
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Login'));
 
     await waitFor(() =>
       expect(screen.getByTestId('error')).toHaveTextContent('Invalid credentials'),

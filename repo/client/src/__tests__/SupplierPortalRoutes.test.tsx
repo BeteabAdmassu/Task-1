@@ -155,4 +155,80 @@ describe('Supplier portal route permissions — SUPPLIER-only policy', () => {
       expect(screen.getByText('Unauthorized')).toBeInTheDocument();
     });
   });
+
+  // ── Security: direct URL access across role-restricted areas ──────────
+
+  describe('direct URL access — cross-role boundary enforcement', () => {
+    it('SUPPLIER navigating directly to /admin is blocked', () => {
+      asUser('SUPPLIER');
+      render(
+        <MemoryRouter initialEntries={['/admin']}>
+          <Routes>
+            <Route path="/login" element={<div>Login</div>} />
+            <Route path="/unauthorized" element={<div>Unauthorized</div>} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute roles={['ADMINISTRATOR']}>
+                  <div>Admin Panel</div>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByText('Unauthorized')).toBeInTheDocument();
+      expect(screen.queryByText('Admin Panel')).not.toBeInTheDocument();
+    });
+
+    it('WAREHOUSE_CLERK navigating directly to /procurement is blocked', () => {
+      asUser('WAREHOUSE_CLERK');
+      render(
+        <MemoryRouter initialEntries={['/procurement']}>
+          <Routes>
+            <Route path="/login" element={<div>Login</div>} />
+            <Route path="/unauthorized" element={<div>Unauthorized</div>} />
+            <Route
+              path="/procurement"
+              element={
+                <ProtectedRoute roles={['PROCUREMENT_MANAGER', 'ADMINISTRATOR']}>
+                  <div>Procurement Dashboard</div>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByText('Unauthorized')).toBeInTheDocument();
+      expect(screen.queryByText('Procurement Dashboard')).not.toBeInTheDocument();
+    });
+
+    it('unauthenticated user navigating directly to /admin is redirected to login', () => {
+      mockUseAuth.mockReturnValue({
+        user: null,
+        loading: false,
+        error: null,
+        login: vi.fn(),
+        logout: vi.fn(),
+      } as any);
+      render(
+        <MemoryRouter initialEntries={['/admin']}>
+          <Routes>
+            <Route path="/login" element={<div>Login</div>} />
+            <Route path="/unauthorized" element={<div>Unauthorized</div>} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute roles={['ADMINISTRATOR']}>
+                  <div>Admin Panel</div>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByText('Login')).toBeInTheDocument();
+      expect(screen.queryByText('Admin Panel')).not.toBeInTheDocument();
+    });
+  });
 });

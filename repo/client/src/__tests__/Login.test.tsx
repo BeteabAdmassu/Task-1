@@ -56,11 +56,10 @@ describe('Login page navigation', () => {
 
     await waitFor(() => screen.getByLabelText(/username/i));
 
-    await act(async () => {
-      await userEvent.type(screen.getByLabelText(/username/i), 'admin');
-      await userEvent.type(screen.getByLabelText(/password/i), 'oldpassword');
-      await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
-    });
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/username/i), 'admin');
+    await user.type(screen.getByLabelText(/password/i), 'oldpassword');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent('/change-password'),
@@ -82,11 +81,10 @@ describe('Login page navigation', () => {
 
     await waitFor(() => screen.getByLabelText(/username/i));
 
-    await act(async () => {
-      await userEvent.type(screen.getByLabelText(/username/i), 'admin');
-      await userEvent.type(screen.getByLabelText(/password/i), 'password');
-      await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
-    });
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/username/i), 'admin');
+    await user.type(screen.getByLabelText(/password/i), 'password');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent('/admin'),
@@ -105,11 +103,10 @@ describe('Login page navigation', () => {
 
     await waitFor(() => screen.getByLabelText(/username/i));
 
-    await act(async () => {
-      await userEvent.type(screen.getByLabelText(/username/i), 'admin');
-      await userEvent.type(screen.getByLabelText(/password/i), 'wrong');
-      await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
-    });
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/username/i), 'admin');
+    await user.type(screen.getByLabelText(/password/i), 'wrong');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() =>
       expect(screen.getByText('Invalid credentials')).toBeInTheDocument(),
