@@ -143,7 +143,7 @@ function SearchResultCard({ result }: { result: SearchResult }) {
       )}
       <div className="article-card-meta" style={{ marginTop: 8 }}>
         {result.author
-          ? `${result.author.firstName} ${result.author.lastName}`
+          ? result.author.username
           : 'Unknown'
         } &mdash; {new Date(result.updatedAt).toLocaleDateString()}
       </div>

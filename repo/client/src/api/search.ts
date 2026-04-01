@@ -7,7 +7,7 @@ export interface SearchResult {
   category: string;
   status: string;
   tags: string[];
-  author: { id: string; firstName: string; lastName: string } | null;
+  author: { id: string; username: string } | null;
   headline: string;
   rank: number;
   updatedAt: string;

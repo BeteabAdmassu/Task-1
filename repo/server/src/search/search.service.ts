@@ -16,7 +16,7 @@ export interface SearchResult {
   category: string;
   status: string;
   tags: string[];
-  author: { id: string; firstName: string; lastName: string } | null;
+  author: { id: string; username: string } | null;
   headline: string;
   rank: number;
   updatedAt: Date;
@@ -114,8 +114,8 @@ export class SearchService {
       visibilitySql = `a.status != $${idx++}`;
       values.push(ArticleStatus.ARCHIVED);
     } else if (userRole === Role.PLANT_CARE_SPECIALIST) {
-      visibilitySql = `(a.status = $${idx++} OR a.status = $${idx++} OR (a.status = $${idx++} AND a."authorId" = $${idx++}))`;
-      values.push(ArticleStatus.STOREWIDE, ArticleStatus.SPECIALIST_ONLY, ArticleStatus.DRAFT, userId);
+      visibilitySql = `(a.status = $${idx++} OR a.status = $${idx++} OR a.status = $${idx++})`;
+      values.push(ArticleStatus.STOREWIDE, ArticleStatus.SPECIALIST_ONLY, ArticleStatus.DRAFT);
     } else {
       visibilitySql = `(a.status = $${idx++} OR (a.status = $${idx++} AND a."authorId" = $${idx++}))`;
       values.push(ArticleStatus.STOREWIDE, ArticleStatus.DRAFT, userId);
@@ -131,8 +131,7 @@ export class SearchService {
         a.tags,
         a."updatedAt",
         a."authorId",
-        u."firstName",
-        u."lastName",
+        u.username AS "authorUsername",
         ts_rank(a.search_vector, to_tsquery('english', $1)) AS rank,
         ts_headline('english', a.title || ' ' || a.content,
           to_tsquery('english', $1),
@@ -168,8 +167,7 @@ export class SearchService {
       author: r['authorId']
         ? {
             id: r['authorId'] as string,
-            firstName: r['firstName'] as string,
-            lastName: r['lastName'] as string,
+            username: (r['authorUsername'] as string) ?? '',
           }
         : null,
       headline: r['headline'] as string,
@@ -197,7 +195,7 @@ export class SearchService {
     if (userRole === Role.ADMINISTRATOR) {
       visibilitySql = `a.status != '${ArticleStatus.ARCHIVED}'`;
     } else if (userRole === Role.PLANT_CARE_SPECIALIST) {
-      visibilitySql = `a.status IN ('${ArticleStatus.STOREWIDE}','${ArticleStatus.SPECIALIST_ONLY}')`;
+      visibilitySql = `a.status IN ('${ArticleStatus.STOREWIDE}','${ArticleStatus.SPECIALIST_ONLY}','${ArticleStatus.DRAFT}')`;
     } else {
       visibilitySql = `a.status = '${ArticleStatus.STOREWIDE}'`;
     }
