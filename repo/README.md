@@ -6,11 +6,11 @@ A full-stack procurement, warehouse, and plant-care knowledge management system 
 
 ## Prerequisites
 
-| Tool | Version |
-|------|---------|
-| Node.js | ≥ 20 |
-| npm | ≥ 10 |
-| PostgreSQL | ≥ 16 |
+| Tool | Required for |
+|------|-------------|
+| Docker (with Compose plugin v2) | Running tests, running the full stack |
+| Node.js ≥ 20 + npm ≥ 10 | Local development only (non-Docker) |
+| PostgreSQL ≥ 16 | Local development only (non-Docker) |
 | Git | any recent |
 
 ---
@@ -154,33 +154,30 @@ curl -I http://localhost:3001/api/health | grep -i x-frame
 # → x-frame-options: SAMEORIGIN
 ```
 
-### Running tests (cross-platform)
+### Running tests
 
-The commands below work on **Windows, macOS, and Linux** — no bash required.
-
-**Backend (Jest):**
-
-```
-cd repo/server
-npm test
-```
-
-**Frontend (Vitest):**
-
-```
-cd repo/client
-npm test
-```
-
-### Run all tests via bash (optional)
-
-On macOS/Linux (or Git Bash / WSL on Windows) you can use the convenience script:
+`run_tests.sh` is the canonical way to run the full test suite. It requires only
+Docker — no Node.js, npm, or PostgreSQL on the host.
 
 ```bash
 bash repo/run_tests.sh
 ```
 
-The script exits with code `1` if any suite fails, making it suitable for CI pipelines.
+It will:
+1. Start (or reuse) the `db` container and wait for it to be healthy.
+2. Run all 17 backend suites (Jest + DB-backed integration tests) inside the `api` container.
+3. Run all 9 frontend suites (Vitest) inside the `web` container.
+4. Exit `0` on full pass, `1` on any failure.
+
+**Local development alternative** — if Node.js is installed on the host:
+
+```bash
+# Backend
+cd repo/server && npm test
+
+# Frontend
+cd repo/client && npm test
+```
 
 ### End-to-End tests (Playwright)
 
@@ -245,6 +242,8 @@ npm run test:e2e
 
 ```
 repo/
+├── docker-compose.yml      Full-stack service definitions (db, api, web)
+├── run_tests.sh            CI test runner — requires Docker only
 ├── server/                 NestJS API
 │   ├── src/
 │   │   ├── auth/           JWT + session auth, change-password
