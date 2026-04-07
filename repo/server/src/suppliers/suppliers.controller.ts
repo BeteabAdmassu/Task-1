@@ -9,7 +9,7 @@ import { QuerySuppliersDto } from './dto/query-suppliers.dto';
 
 function stripSensitiveFields(supplier: Record<string, unknown>, isAdmin: boolean) {
   if (!isAdmin) {
-    const { bankingNotes, internalRiskFlag, ...safe } = supplier;
+    const { bankingNotes, internalRiskFlag, budgetCap, ...safe } = supplier;
     return safe;
   }
   return supplier;

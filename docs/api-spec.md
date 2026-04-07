@@ -53,7 +53,7 @@ All endpoints require `ADM`.
 
 ## Suppliers
 
-Read access: `PM | ADM`. Sensitive fields (`bankingNotes`, `internalRiskFlag`, `budgetCap`) returned only to `ADM`.
+Read access: `PM | ADM`. Sensitive fields (`bankingNotes`, `internalRiskFlag`, `budgetCap`) are stripped for non-`ADM` callers.
 
 | Method | Path | Auth | Body / Query | Description |
 |--------|------|------|-------------|-------------|
@@ -165,7 +165,7 @@ Auth: `PM | ADM`
 |--------|------|-------------|-------------|
 | GET | `/returns` | `?status&supplierId&page&limit` | Paginated return list |
 | GET | `/returns/:id` | — | Return detail with line items and policy snapshot |
-| POST | `/returns` | `{ poId, reason, lineItems: [{ poLineItemId, quantity, condition? }], notes? }` | Create DRAFT return authorization |
+| POST | `/returns` | `{ receiptId, lineItems: [{ receiptLineItemId, quantityReturned, reasonCode, reasonNotes? }] }` | Create DRAFT return authorization |
 | PATCH | `/returns/:id/submit` | — | Submit return for processing |
 | PATCH | `/returns/:id/status` | `{ status }` | Update return status |
 
@@ -176,7 +176,7 @@ Auth: `ADM`
 | Method | Path | Body | Description |
 |--------|------|------|-------------|
 | GET | `/admin/return-policy` | — | Current return policy |
-| PATCH | `/admin/return-policy` | `{ windowDays?, restockingFeePercent?, requiresApproval?, notes? }` | Update policy |
+| PATCH | `/admin/return-policy` | `{ returnWindowDays?, restockingFeeDefault?, restockingFeeAfterDaysThreshold?, restockingFeeAfterDays? }` | Update policy |
 
 ---
 
@@ -244,8 +244,8 @@ Auth: `ADM`
 |--------|------|------|-------------|
 | GET | `/admin/synonyms` | — | All synonym groups |
 | GET | `/admin/synonyms/:id` | — | Single synonym group |
-| POST | `/admin/synonyms` | `{ terms: string[] }` | Create synonym group |
-| PATCH | `/admin/synonyms/:id` | `{ terms?: string[] }` | Update synonym group |
+| POST | `/admin/synonyms` | `{ term: string, synonyms: string[] }` | Create synonym group |
+| PATCH | `/admin/synonyms/:id` | `{ term?: string, synonyms?: string[] }` | Update synonym group |
 | DELETE | `/admin/synonyms/:id` | — | Delete synonym group (`204`) |
 
 ---

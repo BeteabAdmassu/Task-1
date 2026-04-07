@@ -7,7 +7,7 @@ The system is a monorepo with two independently deployable sub-projects:
 ```
 repo/
 ├── server/   NestJS REST API (port 3001)
-└── client/   React SPA (port 5173 in dev, served as static assets in prod)
+└── client/   React SPA (port 3000 in dev, served as static assets in prod)
 ```
 
 All communication is JSON over HTTP. The client authenticates via Bearer JWT for every request; the refresh token travels only as an HttpOnly cookie and is never exposed in response bodies.
@@ -137,7 +137,7 @@ Each NestJS module encapsulates one bounded context. Cross-cutting concerns are 
 
 1. `POST /auth/login` → validates credentials → creates session row → returns `{ accessToken, user }` + `Set-Cookie: refresh_token` (HttpOnly, SameSite=Strict, Secure in prod).
 2. Access token is short-lived (15 min). When it expires the client calls `POST /auth/refresh` with the cookie.
-3. `/auth/refresh` reads the cookie, validates the token, **deletes the old session row**, creates a new one, and returns a new `{ accessToken, user }` + a new `Set-Cookie`. The `refreshToken` value itself is never returned in the JSON body.
+3. `/auth/refresh` reads the cookie, validates the token, **rotates the refresh token on the existing session row** (updates `refreshToken`, `lastActivityAt`, and `expiresAt` in place), and returns a new `{ accessToken, user }` + a new `Set-Cookie`. The `refreshToken` value itself is never returned in the JSON body.
 4. `POST /auth/logout` deletes the session row and clears the cookie.
 5. `POST /auth/change-password` rehashes the password, deletes all sessions *except* the one matching the current refresh token, and returns `{ message }`. The user stays logged in on the current device.
 
@@ -182,7 +182,9 @@ The callback endpoint is guarded by `PAYMENTS_ENABLED=true` env var to prevent t
 
 ## Service Worker Offline Cache
 
-The client registers a service worker that caches Knowledge Base article responses. The cache key is `greenleaf-kb-v2-<userId>` so per-user caches are isolated. On logout the client posts a `CLEAR_CACHE` message to the service worker which purges the cache. Articles are served cache-first; a network failure falls back to cache transparently. Non-KB routes are network-only.
+The client registers a service worker that caches Knowledge Base article responses and operational read endpoints (procurement, purchase orders, receiving, returns, suppliers). The cache key is `greenleaf-kb-v2-<userId>` for KB and `greenleaf-ops-v2-<userId>` for operational data, so per-user caches are isolated. On logout the client posts a `CLEAR_CACHE` message to the service worker which purges all caches.
+
+KB articles and operational GET responses use **network-first with offline fallback**: the service worker attempts the network request first, caches successful responses, and serves the cached copy if the network is unavailable (returning `503` if no cache entry exists). Operational mutations (POST/PATCH/PUT/DELETE to procurement, purchase-orders, receiving, and returns endpoints) are queued in IndexedDB when the device is offline and replayed automatically on reconnect; the service worker returns `202 Queued` with `X-Offline-Queued: true` so the UI can display an appropriate status banner. Non-intercepted routes remain network-only.
 
 Components that fetch data (`SearchResults`, `NotificationsList`, etc.) check `navigator.onLine` in their fetch error handler and display an `offline-banner` rather than a generic error message when the device is disconnected.
 
@@ -196,4 +198,4 @@ Observability endpoints expose background job run history via `job_runs` and all
 
 ## Field Encryption
 
-`bankingNotes` and `internalRiskFlag` on the `Supplier` entity are encrypted at rest using AES-256-GCM. The key is read from `FIELD_ENCRYPTION_KEY` (32-byte hex string). These fields are also restricted to `ADM` in API responses — `PM` callers receive the supplier record with those fields omitted.
+`bankingNotes` and `internalRiskFlag` on the `Supplier` entity are encrypted at rest using AES-256-GCM. The key is read from `FIELD_ENCRYPTION_KEY` (32-byte hex string). These fields, along with `budgetCap`, are restricted to `ADM` in API responses — `PM` callers receive the supplier record with all three fields omitted.

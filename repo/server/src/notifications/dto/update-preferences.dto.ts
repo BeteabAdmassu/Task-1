@@ -1,4 +1,5 @@
-import { IsArray, IsBoolean, IsEnum } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { NotificationType } from '../../common/enums/notification-type.enum';
 
 export class PreferenceItemDto {
@@ -11,5 +12,7 @@ export class PreferenceItemDto {
 
 export class UpdatePreferencesDto {
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PreferenceItemDto)
   preferences: PreferenceItemDto[];
 }

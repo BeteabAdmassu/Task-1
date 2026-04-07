@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, EntityManager } from 'typeorm';
 import { Notification } from './entities/notification.entity';
@@ -179,7 +179,7 @@ export class NotificationService {
 
   async markRead(id: string, userId: string): Promise<Notification> {
     const n = await this.notifRepo.findOne({ where: { id, recipientId: userId } });
-    if (!n) throw new Error('Notification not found');
+    if (!n) throw new NotFoundException('Notification not found');
     if (!n.isRead) {
       await this.notifRepo.update(id, { isRead: true, readAt: new Date() });
     }

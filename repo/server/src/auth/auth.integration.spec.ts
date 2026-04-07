@@ -301,6 +301,39 @@ describe('Auth + Authorization — HTTP integration', () => {
       const res = await request(app.getHttpServer()).post('/api/auth/refresh');
       expect(res.status).toBe(401);
     });
+
+    it('replay attack: old refresh token is rejected after rotation (service throws 401)', async () => {
+      // Simulate the token-rotation scenario:
+      //   1st call  — succeeds; service now stores a NEW token in the session row.
+      //   2nd call  — same old cookie value is replayed; service cannot find a session
+      //               matching the stale token and throws UnauthorizedException.
+      //
+      // The HTTP layer must propagate that as a 401.
+      const { UnauthorizedException } = await import('@nestjs/common');
+
+      // First refresh — succeeds
+      mockAuthService.refresh.mockResolvedValueOnce({
+        accessToken: 'rotated-access-token',
+        refreshToken: 'rotated-refresh-token',
+        user: { id: 'u-pm', username: 'alice', role: Role.PROCUREMENT_MANAGER, mustChangePassword: false },
+      });
+
+      const firstRes = await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .set('Cookie', 'refresh_token=original-token');
+      expect(firstRes.status).toBe(200);
+
+      // Second call with the SAME stale token — service rejects it
+      mockAuthService.refresh.mockRejectedValueOnce(
+        new UnauthorizedException('Invalid or expired refresh token'),
+      );
+
+      const replayRes = await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .set('Cookie', 'refresh_token=original-token');
+
+      expect(replayRes.status).toBe(401);
+    });
   });
 
   // ── 401 — no token ──────────────────────────────────────────────────────────
