@@ -71,6 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userData = result.user as AuthUserExtended;
       setUser(userData);
       swPostMessage({ type: 'SET_USER', userId: userData.id });
+      // Replay any mutations queued while the user was offline before login.
+      swPostMessage({ type: 'SYNC_QUEUE' });
       return userData;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';

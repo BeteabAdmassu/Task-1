@@ -11,6 +11,16 @@ if ('serviceWorker' in navigator) {
       // service worker registration failed silently
     });
   });
+
+  // Deterministic replay trigger: when the window regains connectivity, tell
+  // the active SW to flush any queued offline mutations immediately rather than
+  // relying solely on the SW-scope 'online' event, which is unreliable in some
+  // browsers.
+  window.addEventListener('online', () => {
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'SYNC_QUEUE' });
+    }
+  });
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

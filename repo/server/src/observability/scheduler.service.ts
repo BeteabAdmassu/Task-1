@@ -33,6 +33,16 @@ export class SchedulerService implements OnModuleInit {
       const { attempts } = await withRetry(async (attempt) => {
         if (attempt > 1) {
           this.logger.warn(`Retrying job ${jobName}, attempt ${attempt}`);
+          // Finalize the previous attempt's run record before starting a new one,
+          // so stale RUNNING rows never accumulate in the observability store.
+          if (runId) {
+            await this.observability.failJobRun(
+              runId,
+              Date.now() - start,
+              `Attempt ${attempt - 1} failed, retrying`,
+            );
+            runId = null;
+          }
         }
         runId = (await this.observability.startJobRun(jobName, attempt)).id;
         await fn();
