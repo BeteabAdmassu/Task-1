@@ -8,30 +8,6 @@ import { Observable, tap, catchError, throwError } from 'rxjs';
 import * as crypto from 'crypto';
 import { ObservabilityService } from '../../observability/observability.service';
 
-const SENSITIVE_KEYS = new Set([
-  'password',
-  'passwordHash',
-  'token',
-  'accessToken',
-  'refreshToken',
-  'bankingNotes',
-  'internalRiskFlag',
-  'secret',
-  'authorization',
-]);
-
-function redact(obj: unknown, depth = 0): unknown {
-  if (depth > 4 || obj === null || obj === undefined) return obj;
-  if (typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map((v) => redact(v, depth + 1));
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-    out[k] = SENSITIVE_KEYS.has(k.toLowerCase()) || SENSITIVE_KEYS.has(k)
-      ? '[REDACTED]'
-      : redact(v, depth + 1);
-  }
-  return out;
-}
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {

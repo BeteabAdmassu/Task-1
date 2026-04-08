@@ -160,6 +160,7 @@ curl -I http://localhost:3001/api/health | grep -i x-frame
 Docker — no Node.js, npm, or PostgreSQL on the host.
 
 ```bash
+# Run from the project root (the directory that contains the repo/ folder)
 bash repo/run_tests.sh
 ```
 
@@ -288,7 +289,7 @@ repo/
 | `JWT_SECRET` | **required** | JWT signing secret — server **will not start** without this |
 | `SESSION_TIMEOUT_MINUTES` | `30` | Sliding session window |
 | `API_PORT` | `3001` | Backend listen port |
-| `CORS_ORIGIN` | `http://localhost:5173` | Allowed frontend origin |
+| `CORS_ORIGIN` | `http://localhost:3000` | Allowed frontend origin |
 | `ADMIN_BOOTSTRAP_USERNAME` | `admin` | Initial admin username (one-time) |
 | `ADMIN_BOOTSTRAP_PASSWORD` | *(none)* | Initial admin password (one-time) |
 | `FIELD_ENCRYPTION_KEY` | **required** | 32-byte hex key for AES-256-GCM encryption of supplier `bankingNotes` and `internalRiskFlag` fields |

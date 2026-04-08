@@ -115,6 +115,17 @@ export function SearchResults() {
   );
 }
 
+function renderHighlightedHeadline(headline: string) {
+  // ts_headline returns text with <mark>…</mark> wrapping matched terms.
+  // Split on those tags and render each segment safely — React auto-escapes
+  // all text, so no raw HTML reaches the DOM.
+  return headline.split(/(<mark>[\s\S]*?<\/mark>)/g).map((part, i) => {
+    const match = part.match(/^<mark>([\s\S]*?)<\/mark>$/);
+    if (match) return <mark key={i}>{match[1]}</mark>;
+    return <span key={i}>{part}</span>;
+  });
+}
+
 function SearchResultCard({ result }: { result: SearchResult }) {
   return (
     <Link to={`/plant-care/articles/${result.id}`} className="search-result-card">
@@ -129,10 +140,9 @@ function SearchResultCard({ result }: { result: SearchResult }) {
       </div>
       <h3 className="search-result-title">{result.title}</h3>
       {result.headline && (
-        <p
-          className="search-result-headline"
-          dangerouslySetInnerHTML={{ __html: result.headline }}
-        />
+        <p className="search-result-headline">
+          {renderHighlightedHeadline(result.headline)}
+        </p>
       )}
       {result.tags.length > 0 && (
         <div className="article-tags" style={{ marginTop: 8 }}>

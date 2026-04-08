@@ -1,5 +1,5 @@
-.tmp/
 .claude/
+.temp
 
 # If you have local editor files, it's good to ignore them here
 .vscode/*

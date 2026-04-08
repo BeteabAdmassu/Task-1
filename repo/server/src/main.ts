@@ -11,7 +11,7 @@ async function bootstrap() {
   app.use(helmet());
 
   // CORS: restrict to configured frontend origin
-  const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+  const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
   app.enableCors({
     origin: allowedOrigin,
     credentials: true,
