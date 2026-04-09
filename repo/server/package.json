@@ -19,14 +19,31 @@
     "seed:demo": "ts-node -r tsconfig-paths/register src/seeds/demo.seed.ts"
   },
   "jest": {
-    "moduleFileExtensions": ["js", "json", "ts"],
-    "rootDir": "..",
-    "testMatch": ["<rootDir>/tests/server/**/*.spec.ts"],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": ".",
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/../tests/server"
+    ],
+    "testMatch": [
+      "<rootDir>/../tests/server/**/*.spec.ts"
+    ],
     "transform": {
-      "^.+\\.ts$": ["ts-jest", { "tsconfig": "<rootDir>/server/tsconfig.json" }]
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "tsconfig": "tsconfig.test.json"
+        }
+      ]
     },
-    "collectCoverageFrom": ["<rootDir>/server/src/**/*.(t|j)s"],
-    "coverageDirectory": "<rootDir>/coverage",
+    "collectCoverageFrom": [
+      "src/**/*.(t|j)s"
+    ],
+    "coverageDirectory": "../coverage",
     "testEnvironment": "node"
   },
   "dependencies": {

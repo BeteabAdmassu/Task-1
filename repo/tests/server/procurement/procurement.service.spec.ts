@@ -222,7 +222,7 @@ describe('ProcurementService — approval tier logic', () => {
         const manager = {
           findOne: jest.fn(async () =>
             makeTier2Request([
-              { approverId: 'pm-1', action: ApprovalAction.APPROVE, approver: { role: Role.PROCUREMENT_MANAGER } as unknown as import('../users/user.entity').User },
+              { approverId: 'pm-1', action: ApprovalAction.APPROVE, approver: { role: Role.PROCUREMENT_MANAGER } as unknown as import('../../../server/src/users/user.entity').User },
             ]),
           ),
           save: jest.fn(),
@@ -243,7 +243,7 @@ describe('ProcurementService — approval tier logic', () => {
         const manager = {
           findOne: jest.fn(async () =>
             makeTier2Request([
-              { approverId: 'pm-1', action: ApprovalAction.APPROVE, approver: { role: Role.PROCUREMENT_MANAGER } as unknown as import('../users/user.entity').User },
+              { approverId: 'pm-1', action: ApprovalAction.APPROVE, approver: { role: Role.PROCUREMENT_MANAGER } as unknown as import('../../../server/src/users/user.entity').User },
             ]),
           ),
           save: jest.fn(async (_E: unknown, data: unknown) => data),
@@ -252,7 +252,7 @@ describe('ProcurementService — approval tier logic', () => {
         };
         requestRepo.findOne.mockResolvedValue({
           ...makeTier2Request(),
-          approvals: [{ approverId: 'pm-1', action: ApprovalAction.APPROVE, approver: { role: Role.PROCUREMENT_MANAGER } as unknown as import('../users/user.entity').User }],
+          approvals: [{ approverId: 'pm-1', action: ApprovalAction.APPROVE, approver: { role: Role.PROCUREMENT_MANAGER } as unknown as import('../../../server/src/users/user.entity').User }],
         });
         purchaseOrdersService.generateFromRequest.mockResolvedValue({});
         return fn(manager);

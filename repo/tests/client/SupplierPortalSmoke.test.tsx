@@ -18,15 +18,15 @@ import { SupplierPortal } from '../../client/src/pages/SupplierPortal';
 
 // ── Mock API modules used by SupplierPortal and its child components ──────────
 
-vi.mock('../api/suppliers', () => ({
+vi.mock('../../client/src/api/suppliers', () => ({
   fetchSupplierPortalProfile: vi.fn(),
 }));
 
-vi.mock('../api/purchase-orders', () => ({
+vi.mock('../../client/src/api/purchase-orders', () => ({
   fetchPortalPos: vi.fn(),
 }));
 
-vi.mock('../api/returns', () => ({
+vi.mock('../../client/src/api/returns', () => ({
   fetchPortalReturns: vi.fn(),
 }));
 

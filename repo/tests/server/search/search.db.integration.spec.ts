@@ -77,7 +77,7 @@ describe('Search — DB-backed integration (real SQL path)', () => {
         TypeOrmModule.forRoot({
           ...typeOrmConfig,
           // The same DB used by the running server; migrations already applied.
-          migrationsRun: false, // they've already run
+          migrationsRun: true, // run on each fresh-DB test invocation
         }),
         TypeOrmModule.forFeature([SearchSynonym, SearchHistory, Article, User]),
         PassportModule,

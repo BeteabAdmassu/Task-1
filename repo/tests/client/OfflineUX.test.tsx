@@ -13,10 +13,10 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 // Module-level mocks — these replace the entire module for this test file.
-vi.mock('../api/search', () => ({
+vi.mock('../../client/src/api/search', () => ({
   searchArticles: vi.fn(),
 }));
-vi.mock('../api/notifications', () => ({
+vi.mock('../../client/src/api/notifications', () => ({
   fetchNotifications: vi.fn(),
   markNotificationRead: vi.fn(),
   markAllRead: vi.fn(),

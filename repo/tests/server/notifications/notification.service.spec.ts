@@ -422,9 +422,9 @@ describe('SchedulerService — notification-queue-drain uses transaction', () =>
    * to keep the assertion co-located with the notification tests.
    */
   it('wraps notification-queue-drain in dataSource.transaction()', async () => {
-    const { SchedulerService } = await import('../observability/scheduler.service');
-    const { ObservabilityService } = await import('../observability/observability.service');
-    const { DataQualityService } = await import('../data-quality/data-quality.service');
+    const { SchedulerService } = await import('../../../server/src/observability/scheduler.service');
+    const { ObservabilityService } = await import('../../../server/src/observability/observability.service');
+    const { DataQualityService } = await import('../../../server/src/data-quality/data-quality.service');
 
     const drainQueue = jest.fn<Promise<void>, [EntityManager?]>(async () => undefined);
     const transaction = jest.fn(async (fn: (m: EntityManager) => Promise<void>) => {

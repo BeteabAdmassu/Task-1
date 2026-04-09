@@ -7,11 +7,11 @@ import { ReceivingForm } from '../../client/src/pages/ReceivingForm';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-vi.mock('../api/purchase-orders', () => ({
+vi.mock('../../client/src/api/purchase-orders', () => ({
   fetchPos: vi.fn(),
 }));
 
-vi.mock('../api/receiving', () => ({
+vi.mock('../../client/src/api/receiving', () => ({
   fetchPutawayLocations: vi.fn(),
   createReceipt: vi.fn(),
   completeReceipt: vi.fn(),

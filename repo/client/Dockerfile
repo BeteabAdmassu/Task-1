@@ -3,7 +3,7 @@ FROM node:20-alpine
 WORKDIR /repo/client
 
 COPY client/package.json client/package-lock.json* ./
-RUN npm install
+RUN npm install && ln -s /repo/client/node_modules /repo/node_modules
 
 COPY client/ .
 COPY tests/client/ /repo/tests/client/
