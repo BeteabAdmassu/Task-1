@@ -20,8 +20,8 @@ services:
 
   api:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     restart: unless-stopped
     environment:
       DB_HOST: db
@@ -41,8 +41,8 @@ services:
 
   web:
     build:
-      context: ./client
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: client/Dockerfile
     restart: unless-stopped
     environment:
       VITE_API_URL: http://localhost:${API_PORT:-3001}

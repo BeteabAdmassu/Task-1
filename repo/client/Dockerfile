@@ -1,11 +1,12 @@
 FROM node:20-alpine
 
-WORKDIR /app
+WORKDIR /repo/client
 
-COPY package.json package-lock.json* ./
+COPY client/package.json client/package-lock.json* ./
 RUN npm install
 
-COPY . .
+COPY client/ .
+COPY tests/client/ /repo/tests/client/
 
 EXPOSE 3000
 

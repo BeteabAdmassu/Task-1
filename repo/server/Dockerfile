@@ -1,11 +1,13 @@
 FROM node:20-alpine
 
-WORKDIR /app
+WORKDIR /repo/server
 
-COPY package.json package-lock.json* ./
+COPY server/package.json server/package-lock.json* ./
 RUN npm install
 
-COPY . .
+COPY server/ .
+COPY tests/server/ /repo/tests/server/
+
 RUN npm run build
 
 EXPOSE 3001
