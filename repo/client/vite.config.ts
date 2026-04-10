@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 // VITE_API_PORT lets Playwright E2E tests point the proxy at a dedicated
 // test backend (e.g. port 3101) without touching the developer's server.
 const apiPort = process.env.VITE_API_PORT || '3001';
+const apiTarget = process.env.VITE_API_URL || `http://127.0.0.1:${apiPort}`;
 
 export default defineConfig({
   plugins: [react()],
@@ -13,7 +14,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: `http://127.0.0.1:${apiPort}`,
+        target: apiTarget,
         changeOrigin: true,
       },
     },

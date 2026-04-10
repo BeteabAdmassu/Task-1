@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, MoreThanOrEqual, LessThanOrEqual, Between } from 'typeorm';
+import * as os from 'os';
 import { SystemLog } from './entities/system-log.entity';
 import { JobRun } from './entities/job-run.entity';
 
@@ -180,6 +181,15 @@ export class ObservabilityService {
   // ── System stats ───────────────────────────────────────────────────────────
 
   async getSystemStats(): Promise<{
+    process: {
+      memoryMb: { rss: number; heapUsed: number; heapTotal: number };
+      cpuUsageMs: { user: number; system: number };
+      uptimeSeconds: number;
+    };
+    system: {
+      loadAvg: [number, number, number];
+      memoryMb: { total: number; free: number; used: number };
+    };
     dbConnections: { active: number; idle: number; total: number };
     tableSizes: Array<{ table: string; sizeBytes: number; prettySize: string }>;
     uptimeSeconds: number;
@@ -209,7 +219,34 @@ export class ObservabilityService {
     const active = connMap.get('active') ?? 0;
     const idle = connMap.get('idle') ?? 0;
 
+    const mem = process.memoryUsage();
+    const cpu = process.cpuUsage();
+    const toMb = (bytes: number) => Math.round(bytes / 1024 / 1024);
+    const loadAvg = os.loadavg() as [number, number, number];
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+
     return {
+      process: {
+        memoryMb: {
+          rss: toMb(mem.rss),
+          heapUsed: toMb(mem.heapUsed),
+          heapTotal: toMb(mem.heapTotal),
+        },
+        cpuUsageMs: {
+          user: Math.round(cpu.user / 1000),
+          system: Math.round(cpu.system / 1000),
+        },
+        uptimeSeconds: Math.round(process.uptime()),
+      },
+      system: {
+        loadAvg,
+        memoryMb: {
+          total: toMb(totalMem),
+          free: toMb(freeMem),
+          used: toMb(totalMem - freeMem),
+        },
+      },
       dbConnections: { active, idle, total: active + idle },
       tableSizes: sizeRows.map((r) => ({
         table: r.table,

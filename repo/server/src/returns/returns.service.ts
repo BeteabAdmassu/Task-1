@@ -222,16 +222,21 @@ export class ReturnsService {
       await this.fundsLedger.recordRefund(ra.supplierId ?? '', totalRefund, id, userId);
     }
 
-    if (
+    if (ra.createdBy && newStatus === ReturnStatus.CANCELLED) {
+      await this.notificationService.emit(
+        ra.createdBy,
+        NotificationType.CANCELLATION,
+        'Return Cancelled',
+        `Return authorization ${ra.raNumber} has been cancelled.`,
+        { type: 'ReturnAuthorization', id },
+      );
+    } else if (
       ra.createdBy &&
-      (newStatus === ReturnStatus.APPROVED ||
-        newStatus === ReturnStatus.COMPLETED ||
-        newStatus === ReturnStatus.CANCELLED)
+      (newStatus === ReturnStatus.APPROVED || newStatus === ReturnStatus.COMPLETED)
     ) {
       const statusLabels: Record<string, string> = {
         [ReturnStatus.APPROVED]: 'approved',
         [ReturnStatus.COMPLETED]: 'completed',
-        [ReturnStatus.CANCELLED]: 'cancelled',
       };
       await this.notificationService.emit(
         ra.createdBy,

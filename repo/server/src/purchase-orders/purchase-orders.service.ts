@@ -136,14 +136,28 @@ export class PurchaseOrdersService {
     return po;
   }
 
-  async update(id: string, dto: UpdatePoDto): Promise<PurchaseOrder> {
+  async update(id: string, dto: UpdatePoDto, userId?: string): Promise<PurchaseOrder> {
     const po = await this.findById(id);
     if (po.status === PoStatus.CANCELLED || po.status === PoStatus.CLOSED) {
       throw new BadRequestException('Cannot update a cancelled or closed PO');
     }
+    const deliveryDateChanged =
+      dto.expectedDeliveryDate !== undefined &&
+      String(dto.expectedDeliveryDate) !== String(po.expectedDeliveryDate);
     if (dto.expectedDeliveryDate !== undefined) po.expectedDeliveryDate = dto.expectedDeliveryDate;
     if (dto.notes !== undefined) po.notes = dto.notes;
     await this.poRepo.save(po);
+
+    if (deliveryDateChanged && po.createdBy) {
+      await this.notificationService.emit(
+        po.createdBy,
+        NotificationType.SCHEDULE_CHANGE,
+        'Delivery Date Updated',
+        `The expected delivery date for purchase order ${po.poNumber} has been updated.`,
+        { type: 'PurchaseOrder', id: po.id },
+      );
+    }
+
     return this.findById(id);
   }
 
@@ -230,13 +244,24 @@ export class PurchaseOrdersService {
         );
       }
 
+      const previousStatus = po.status;
       po.status = PoStatus.CANCELLED;
       await manager.save(po);
 
       await this.auditService.log(userId, AuditAction.PO_CANCELLED, 'PurchaseOrder', po.id, {
         poNumber: po.poNumber,
-        previousStatus: po.status,
+        previousStatus,
       });
+
+      if (po.createdBy) {
+        await this.notificationService.emit(
+          po.createdBy,
+          NotificationType.CANCELLATION,
+          'Purchase Order Cancelled',
+          `Purchase order ${po.poNumber} has been cancelled.`,
+          { type: 'PurchaseOrder', id: po.id },
+        );
+      }
     });
     return this.findById(id);
   }

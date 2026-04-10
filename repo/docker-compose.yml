@@ -33,6 +33,8 @@ services:
       SESSION_TIMEOUT_MINUTES: ${SESSION_TIMEOUT_MINUTES:-30}
       FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-change-me-to-a-random-32-char-key}
       API_PORT: 3001
+      ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
     ports:
       - '${API_PORT:-3001}:3001'
     depends_on:
@@ -45,7 +47,7 @@ services:
       dockerfile: client/Dockerfile
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:${API_PORT:-3001}
+      VITE_API_URL: http://api:3001
     ports:
       - '${WEB_PORT:-3000}:3000'
     depends_on:

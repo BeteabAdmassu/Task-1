@@ -28,9 +28,12 @@ CREATE DATABASE greenleaf_db OWNER greenleaf;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 ```
 
-### 2. Configure backend environment variables
+### 2. Configure environment variables
 
-Create `repo/server/.env` (or export these variables in your shell):
+**Docker Compose** reads from `repo/.env` (the repo root).  
+**Local development** (non-Docker) reads from `repo/server/.env` for the backend; the frontend has no separate env file.
+
+Create the appropriate `.env` file (use `.env.example` as a template):
 
 ```env
 # Database
@@ -50,7 +53,7 @@ ADMIN_BOOTSTRAP_PASSWORD=ChangeMe!2024
 
 # API
 API_PORT=3001
-CORS_ORIGIN=http://localhost:3000
+WEB_PORT=3000
 
 # Field encryption — required for supplier sensitive fields (bankingNotes, internalRiskFlag)
 FIELD_ENCRYPTION_KEY=replace-with-a-64-char-hex-string
@@ -87,6 +90,20 @@ npm run migration:revert
 
 ---
 
+## Running with Docker Compose
+
+```bash
+# From repo/
+docker compose up --build
+```
+
+- Web UI: `http://localhost:3000`
+- API:    `http://localhost:3001/api`
+
+The `web` container's Vite dev server proxies `/api/*` to the `api` container using the `VITE_API_URL=http://api:3001` env var set in `docker-compose.yml`. Docker's internal DNS resolves the service name `api` automatically.
+
+---
+
 ## Running Locally (non-Docker)
 
 ### Backend
@@ -109,8 +126,7 @@ npm run dev             # Vite dev server with HMR
 
 The app will be available at `http://localhost:3000`.
 
-The Vite dev server proxies `/api/*` requests to `http://localhost:3001`, so
-both server and client can run on the same machine without CORS issues during development.
+The Vite dev server proxies `/api/*` to `http://127.0.0.1:3001` by default (override with `VITE_API_URL` or `VITE_API_PORT`), so both server and client can run on the same machine without CORS issues during development.
 
 ---
 
@@ -264,14 +280,16 @@ repo/
 │   │   ├── seeds/          Non-production demo seed (npm run seed:demo)
 │   │   └── migrations/     18 sequential DB migrations
 │   └── package.json
+├── tests/
+│   ├── server/             Jest test suites (unit + DB integration)
+│   └── client/             Vitest test suites
 └── client/                 React + Vite SPA
     ├── public/sw.js        User-scoped offline KB cache
     ├── src/
     │   ├── api/            Typed fetch wrappers per domain
     │   ├── components/     Layout, Sidebar, TopNav, NotificationBell
     │   ├── contexts/       AuthContext (login/logout/SW cache lifecycle)
-    │   ├── pages/          One component per route
-    │   └── __tests__/      Vitest test suite
+    │   └── pages/          One component per route
     └── package.json
 ```
 
