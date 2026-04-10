@@ -40,6 +40,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<AuthUserExtended>;
   logout: () => Promise<void>;
   clearError: () => void;
+  updateUser: (patch: Partial<AuthUserExtended>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -90,8 +91,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearError = useCallback(() => setError(null), []);
 
+  const updateUser = useCallback((patch: Partial<AuthUserExtended>) => {
+    setUser((prev) => (prev ? { ...prev, ...patch } : prev));
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, logout, clearError }}>
+    <AuthContext.Provider value={{ user, loading, error, login, logout, clearError, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

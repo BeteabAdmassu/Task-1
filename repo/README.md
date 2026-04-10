@@ -49,7 +49,7 @@ SESSION_TIMEOUT_MINUTES=30
 
 # Bootstrap admin — set ONCE for initial setup, then unset
 ADMIN_BOOTSTRAP_USERNAME=admin
-ADMIN_BOOTSTRAP_PASSWORD=ChangeMe!2024
+ADMIN_BOOTSTRAP_PASSWORD=change-me
 
 # API
 API_PORT=3001
@@ -132,13 +132,13 @@ The Vite dev server proxies `/api/*` to `http://127.0.0.1:3001` by default (over
 
 ## First-Login Bootstrap
 
-1. Ensure `ADMIN_BOOTSTRAP_PASSWORD` is set in the server environment.
-2. Start the server — the migration seeds the admin user with `mustChangePassword = true`.
+1. Start the server (`docker compose up --build` or `npm run start:dev`).
+2. The migration seeds the admin user automatically. The password is the value of `ADMIN_BOOTSTRAP_PASSWORD` — defaults to `change-me` if not set.
 3. Open `http://localhost:3000` and log in with:
-   - **Username:** value of `ADMIN_BOOTSTRAP_USERNAME` (default: `admin`)
-   - **Password:** value of `ADMIN_BOOTSTRAP_PASSWORD`
+   - **Username:** `admin` (or the value of `ADMIN_BOOTSTRAP_USERNAME`)
+   - **Password:** `change-me` (or whatever you set in `ADMIN_BOOTSTRAP_PASSWORD`)
 4. You will be redirected to a forced password-change screen.
-5. Set a strong password. After saving, `ADMIN_BOOTSTRAP_PASSWORD` can be removed from the environment.
+5. Set a strong password. After saving you are taken directly to the dashboard.
 
 ---
 
@@ -309,7 +309,7 @@ repo/
 | `API_PORT` | `3001` | Backend listen port |
 | `CORS_ORIGIN` | `http://localhost:3000` | Allowed frontend origin |
 | `ADMIN_BOOTSTRAP_USERNAME` | `admin` | Initial admin username (one-time) |
-| `ADMIN_BOOTSTRAP_PASSWORD` | *(none)* | Initial admin password (one-time) |
+| `ADMIN_BOOTSTRAP_PASSWORD` | `change-me` | Initial admin password (one-time) |
 | `FIELD_ENCRYPTION_KEY` | **required** | 32-byte hex key for AES-256-GCM encryption of supplier `bankingNotes` and `internalRiskFlag` fields |
 | `NODE_ENV` | — | Set to `production` to enable secure cookies |
 
