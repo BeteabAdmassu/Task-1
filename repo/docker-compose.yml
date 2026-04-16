@@ -1,4 +1,4 @@
-version: '3.9'
+name: greenleaf
 
 services:
   db:
@@ -35,6 +35,7 @@ services:
       API_PORT: 3001
       ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
       ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-change-me}
+      AUTH_LOGIN_THROTTLE_LIMIT: ${AUTH_LOGIN_THROTTLE_LIMIT:-1000}
     ports:
       - '${API_PORT:-3001}:3001'
     depends_on:
@@ -52,6 +53,27 @@ services:
       - '${WEB_PORT:-3000}:3000'
     depends_on:
       - api
+
+  # Playwright E2E runner. Not part of the default `up` lifecycle; invoked
+  # explicitly by run_tests.sh via `docker compose run --rm e2e`.
+  e2e:
+    profiles: ['e2e']
+    build:
+      context: .
+      dockerfile: e2e.Dockerfile
+    environment:
+      # Tests point at localhost so Chromium treats the origin as secure
+      # (needed for service workers). socat inside the e2e container
+      # forwards 127.0.0.1:3000→web:3000 and 127.0.0.1:3001→api:3001.
+      E2E_BASE_URL: http://localhost:3000
+      E2E_API_URL: http://localhost:3001
+      E2E_ADMIN_USER: ${E2E_ADMIN_USER:-demo_admin}
+      E2E_ADMIN_PASS: ${E2E_ADMIN_PASS:-Demo1234!}
+    depends_on:
+      api:
+        condition: service_started
+      web:
+        condition: service_started
 
 volumes:
   pgdata:

@@ -12,6 +12,10 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    // Allow arbitrary Host headers. In Docker, clients reach the web service
+    // via the Docker Compose DNS name ("web"), which is not a loopback host,
+    // so Vite 5+ would otherwise reject it.
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: apiTarget,

@@ -94,6 +94,7 @@ fi
 run_suite \
   "Backend unit + integration tests (Jest)" \
   -e JWT_SECRET=test-secret-for-testing \
+  -e AUTH_LOGIN_THROTTLE_LIMIT=10 \
   api \
   "npm test"
 
@@ -105,6 +106,28 @@ run_suite \
   --no-deps \
   web \
   "npm test"
+
+# ── E2E (Playwright in Docker, real browser → web → api → db) ─────────────────
+# The e2e service is gated behind the `e2e` profile so it never joins the
+# default `up` lifecycle. We start api+web explicitly, seed demo data, then
+# run Playwright inside a container that shares the Compose network.
+echo ""
+echo "Bringing up api and web for E2E..."
+if ! $DC -f "$COMPOSE_FILE" up -d --wait api web; then
+  echo "ERROR: api/web failed to start — skipping E2E." >&2
+  FAIL=$((FAIL + 1))
+else
+  echo "Seeding demo data (idempotent)..."
+  $DC -f "$COMPOSE_FILE" exec -T api sh -c "npm run seed:demo" || {
+    echo "WARNING: demo seed reported errors (may be pre-existing data)." >&2
+  }
+
+  run_suite \
+    "End-to-end tests (Playwright in Docker)" \
+    --no-deps \
+    e2e \
+    "npx playwright test"
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""

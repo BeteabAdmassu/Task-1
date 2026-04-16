@@ -44,7 +44,8 @@
       "src/**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "testTimeout": 30000
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",

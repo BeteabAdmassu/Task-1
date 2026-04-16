@@ -13,7 +13,7 @@ import { test, expect } from '@playwright/test';
  * Runs against the E2E backend on port 3101.
  */
 
-const BASE = 'http://localhost:3101/api';
+const BASE = `${process.env.E2E_API_URL || 'http://localhost:3101'}/api`;
 
 async function login(
   request: Parameters<typeof test>[1] extends { request: infer R } ? R : never,

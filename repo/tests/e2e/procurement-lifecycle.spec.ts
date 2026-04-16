@@ -19,7 +19,7 @@ import { test, expect } from '@playwright/test';
  *   - demo_clerk  (WAREHOUSE_CLERK) — creates receipts
  */
 
-const BASE = 'http://localhost:3101/api';
+const BASE = `${process.env.E2E_API_URL || 'http://localhost:3101'}/api`;
 
 async function login(request: Parameters<typeof test>[1] extends { request: infer R } ? R : never, username: string, password: string): Promise<string> {
   const res = await request.post(`${BASE}/auth/login`, {
