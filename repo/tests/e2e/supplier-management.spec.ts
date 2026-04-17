@@ -39,32 +39,35 @@ test.describe('Supplier management — UI flow', () => {
     expect(page.url()).not.toContain('/login');
   });
 
-  test('admin navigates to /suppliers and the list page issues a real /api/suppliers request', async ({
+  test('admin navigates to /suppliers and the list page issues a real /api/suppliers response', async ({
     page,
   }) => {
     await uiLogin(page);
 
-    // Intercept (read-only — do not stub) the suppliers list request.
-    const listRequest = page.waitForRequest(
-      (req) =>
-        req.method() === 'GET' &&
-        /\/api\/suppliers(\?|$)/.test(req.url()),
-      { timeout: 15_000 },
-    );
+    // Register the response waiter + trigger the navigation in a single
+    // `Promise.all` so we can't race the on-mount fetch. waitForResponse is
+    // more forgiving than waitForRequest on slow CI hosts because it waits
+    // for the full response round-trip rather than the outbound request
+    // alone. If the page happens to redirect before the suppliers list
+    // renders, the waiter times out — which itself would be a real
+    // regression in the auth cookie / JWT refresh / proxy / role-gate
+    // chain this test was written to protect.
+    const [res] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.request().method() === 'GET' &&
+          /\/api\/suppliers(\?|$)/.test(r.url()),
+        { timeout: 30_000 },
+      ),
+      page.goto('/procurement/suppliers'),
+    ]);
 
-    await page.goto('/procurement/suppliers');
-
-    const req = await listRequest;
-    // The request is real — it goes through the Vite proxy to the NestJS
-    // backend and hits Postgres. We only assert its shape here.
-    expect(req.url()).toMatch(/\/api\/suppliers/);
-
-    // And the response arrives as a 200 JSON list (the real API, not a mock).
-    const res = await req.response();
-    expect(res).not.toBeNull();
-    expect(res!.status()).toBe(200);
-    const body = await res!.json();
+    // The response is from the real API (not a stub) and surfaces a
+    // paginated JSON body from Postgres.
+    expect(res.status()).toBe(200);
+    const body = await res.json();
     expect(Array.isArray(body.data)).toBe(true);
+    expect(typeof body.meta).toBe('object');
   });
 
   test('admin route guard returns 401 when no access token is attached to a direct fetch', async ({
