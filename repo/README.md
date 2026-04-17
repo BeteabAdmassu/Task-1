@@ -29,9 +29,17 @@ inside a container via `docker compose exec`.
 ## Quick Start (Docker-first, canonical)
 
 ```bash
-# From repo/
+# From repo/ — recommended (Docker Compose v2 plugin)
 docker compose up --build
+
+# Compatible legacy syntax (standalone docker-compose v1 binary)
+docker-compose up
 ```
+
+Both commands bring up the exact same stack (`db`, `api`, `web`). Use
+`docker compose up --build` if you have the Compose v2 plugin (shipped with
+Docker Desktop and modern Docker Engine); fall back to `docker-compose up`
+only if you are on a host that still ships the legacy v1 binary.
 
 | Service | Published URL |
 |---------|--------------|

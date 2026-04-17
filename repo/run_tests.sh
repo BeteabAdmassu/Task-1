@@ -9,8 +9,10 @@
 #
 # CI contract:
 #   1. Docker images must be built before this script is called.
-#   2. This script starts whatever services it needs (or reuses already-running
-#      ones) and removes the ephemeral test containers on exit.
+#   2. This script runs a preflight `docker compose up -d` if the stack is
+#      not already running, so a cold host just works. If db/api/web are
+#      already up (developer workflow) they are reused in place.
+#   3. Ephemeral test containers (`run --rm`) are removed on exit.
 
 set -euo pipefail
 
@@ -28,6 +30,26 @@ else
   echo "ERROR: Neither 'docker compose' (plugin) nor 'docker-compose' (standalone) found." >&2
   echo "       Install Docker Desktop or the Docker Compose plugin and retry." >&2
   exit 1
+fi
+
+# ── Preflight: bring the full stack up if it isn't already running ────────────
+# We count the compose services in the "running" state. If ANY of db/api/web
+# are missing, we `docker compose up -d` the whole stack. Compose is
+# idempotent: if a service is already running it stays running. This keeps
+# the script safe to run either against a cold host (nothing up) or against
+# a developer's already-started stack.
+echo ""
+echo "Preflight: ensuring db/api/web are running..."
+running_count=$($DC -f "$COMPOSE_FILE" ps --services --filter "status=running" 2>/dev/null \
+  | grep -cE '^(db|api|web)$' || true)
+if [ "${running_count:-0}" -lt 3 ]; then
+  echo "Stack not fully running (${running_count:-0}/3) — bringing it up with 'docker compose up -d'..."
+  if ! $DC -f "$COMPOSE_FILE" up -d db api web; then
+    echo "ERROR: 'docker compose up -d' failed — aborting." >&2
+    exit 1
+  fi
+else
+  echo "All three services (db, api, web) are already running — reusing them."
 fi
 
 # ── run_suite <name> <compose-run-flags...> -- <service> <cmd> ────────────────
