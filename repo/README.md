@@ -1,6 +1,15 @@
 # GreenLeaf Operations Suite
 
-A full-stack procurement, warehouse, and plant-care knowledge management system built with NestJS + TypeORM (backend) and React + Vite (frontend).
+project-type: fullstack
+
+A fullstack procurement, warehouse, and plant-care knowledge management
+system built with NestJS + TypeORM (backend) and React + Vite (frontend).
+
+Everything below — startup, database, migrations, first login, and the full
+test suite — runs inside Docker Compose containers. **The canonical path
+requires only Docker with the Compose v2 plugin on the host**; no Node, npm,
+pip, apt-get, or Postgres install is needed, and no manual database setup is
+performed by the operator.
 
 ---
 
@@ -8,137 +17,65 @@ A full-stack procurement, warehouse, and plant-care knowledge management system 
 
 | Tool | Required for |
 |------|-------------|
-| Docker (with Compose plugin v2) | Running tests, running the full stack |
-| Node.js ≥ 20 + npm ≥ 10 | Local development only (non-Docker) |
-| PostgreSQL ≥ 16 | Local development only (non-Docker) |
-| Git | any recent |
+| **Docker + Compose v2 plugin** | The only host requirement. Runs the app stack and the full test suite. |
+| Git | Cloning the repo. |
+
+No Node, npm, pip, apt-get, or host PostgreSQL is required — every
+command in this README is either `curl`, `docker compose ...`, or runs
+inside a container via `docker compose exec`.
 
 ---
 
-## Environment Setup
-
-### 1. Create the PostgreSQL database
-
-```sql
--- Run as a PostgreSQL superuser
-CREATE USER greenleaf WITH PASSWORD 'greenleaf_secret';
-CREATE DATABASE greenleaf_db OWNER greenleaf;
--- Required for full-text search and trigram similarity
-\c greenleaf_db
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-```
-
-### 2. Configure environment variables
-
-**Docker Compose** reads from `repo/.env` (the repo root).  
-**Local development** (non-Docker) reads from `repo/server/.env` for the backend; the frontend has no separate env file.
-
-Create the appropriate `.env` file (use `.env.example` as a template):
-
-```env
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=greenleaf
-DB_PASS=greenleaf_secret
-DB_NAME=greenleaf_db
-
-# Auth — CHANGE THESE before production use
-JWT_SECRET=replace-with-a-long-random-string
-SESSION_TIMEOUT_MINUTES=30
-
-# Bootstrap admin — set ONCE for initial setup, then unset
-ADMIN_BOOTSTRAP_USERNAME=admin
-ADMIN_BOOTSTRAP_PASSWORD=change-me
-
-# API
-API_PORT=3001
-WEB_PORT=3000
-
-# Field encryption — required for supplier sensitive fields (bankingNotes, internalRiskFlag)
-FIELD_ENCRYPTION_KEY=replace-with-a-64-char-hex-string
-```
-
-Generate a strong key:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-> **Security:** `ADMIN_BOOTSTRAP_PASSWORD` is used exactly once to seed the initial
-> administrator account. Remove it from your environment after the first login and
-> password change. No hardcoded credential exists in the source code.
-
----
-
-## Database Migration
-
-Migrations run automatically when the server starts (`migrationsRun: true`).
-
-To run them manually:
-
-```bash
-cd repo/server
-npm run migration:run
-```
-
-To revert the last migration:
-
-```bash
-npm run migration:revert
-```
-
----
-
-## Running with Docker Compose
+## Quick Start (Docker-first, canonical)
 
 ```bash
 # From repo/
 docker compose up --build
 ```
 
-- Web UI: `http://localhost:3000`
-- API:    `http://localhost:3001/api`
+| Service | Published URL |
+|---------|--------------|
+| Web UI  | http://localhost:3000 |
+| API     | http://localhost:3001/api |
+| Postgres | localhost:5432 (published for debugging only) |
 
-The `web` container's Vite dev server proxies `/api/*` to the `api` container using the `VITE_API_URL=http://api:3001` env var set in `docker-compose.yml`. Docker's internal DNS resolves the service name `api` automatically.
+What this does automatically (no manual steps):
 
----
+1. Brings up the `db` service on Postgres 16, creates the `greenleaf`
+   role + `greenleaf_db` database, and enables the `pg_trgm` extension via
+   the migration scripts.
+2. Starts the `api` service (NestJS). TypeORM migrations run on boot
+   (`migrationsRun: true` in `server/src/config/typeorm.config.ts`), so
+   the schema, seeded enums, and the admin-bootstrap user are all applied
+   automatically.
+3. Starts the `web` service (Vite) which proxies `/api/*` to `http://api:3001`
+   on the internal Compose network (`VITE_API_URL` in `docker-compose.yml`).
 
-## Running Locally (non-Docker)
+No `CREATE USER`, `npm install`, or host Postgres setup is required. A
+second `docker compose up` reuses the same Postgres volume and preserves
+all data.
 
-### Backend
+### Environment variables
 
-```bash
-cd repo/server
-npm install
-npm run start:dev       # watch mode — restarts on file changes
-```
+All defaults live in `docker-compose.yml`. To override them without editing
+the file, create `repo/.env` — Docker Compose picks it up automatically.
+**The canonical path does not require a `.env` file** because the compose
+file provides safe defaults for every variable (e.g.
+`ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-change-me}`).
 
-The API will be available at `http://localhost:3001/api`.
-
-### Frontend
-
-```bash
-cd repo/client
-npm install
-npm run dev             # Vite dev server with HMR
-```
-
-The app will be available at `http://localhost:3000`.
-
-The Vite dev server proxies `/api/*` to `http://127.0.0.1:3001` by default (override with `VITE_API_URL` or `VITE_API_PORT`), so both server and client can run on the same machine without CORS issues during development.
+See *Key Environment Variables Reference* further down for the full list.
 
 ---
 
 ## First-Login Bootstrap
 
-1. Start the server (`docker compose up --build` or `npm run start:dev`).
-2. The migration seeds the admin user automatically. The password is the value of `ADMIN_BOOTSTRAP_PASSWORD` — defaults to `change-me` if not set.
-3. Open `http://localhost:3000` and log in with:
-   - **Username:** `admin` (or the value of `ADMIN_BOOTSTRAP_USERNAME`)
-   - **Password:** `change-me` (or whatever you set in `ADMIN_BOOTSTRAP_PASSWORD`)
-4. You will be redirected to a forced password-change screen.
-5. Set a strong password. After saving you are taken directly to the dashboard.
+1. `docker compose up --build` — the migration seeds the admin user with
+   the password set by `ADMIN_BOOTSTRAP_PASSWORD` (default: `change-me`).
+2. Open http://localhost:3000 and log in with:
+   - **Username:** `admin`
+   - **Password:** `change-me` (or whatever you set in the env var)
+3. The UI redirects to a forced password-change screen. Set a strong
+   password. After saving, you land on the role-appropriate dashboard.
 
 ---
 
@@ -172,86 +109,80 @@ curl -I http://localhost:3001/api/health | grep -i x-frame
 
 ### Running tests
 
-`run_tests.sh` is the canonical way to run the full test suite. It requires only
-Docker — no Node.js, npm, or PostgreSQL on the host.
+`bash repo/run_tests.sh` is the canonical full-suite path. It runs every
+suite inside a Docker container — **the only host requirement is Docker +
+the Compose v2 plugin**. No Node, npm, or PostgreSQL needs to be installed
+locally.
 
 ```bash
-# Run from the project root (the directory that contains the repo/ folder)
+# From the directory that contains repo/
 bash repo/run_tests.sh
 ```
 
-It will:
-1. Start (or reuse) the `db` container and wait for it to be healthy.
-2. Run all 17 backend suites (Jest + DB-backed integration tests) inside the `api` container.
-3. Run all 9 frontend suites (Vitest) inside the `web` container.
-4. Exit `0` on full pass, `1` on any failure.
+The script runs three phases and exits `0` only if all three pass:
 
-**Local development alternative** — if Node.js is installed on the host:
+1. **Backend — Jest unit + integration tests** in the `api` container. Covers
+   domain services, controllers, and real-DB integration suites (TypeORM +
+   `supertest`) against the `db` service.
+2. **Frontend — Vitest component tests** in the `web` container (`--no-deps`,
+   no DB needed).
+3. **End-to-end — Playwright** in the `e2e` container (Chromium, real
+   browser → Vite proxy → NestJS → Postgres). See the section below for
+   details.
 
-```bash
-# Backend
-cd repo/server && npm test
+The DB service is brought up and health-checked before phase 1; `api` +
+`web` are brought up and the demo seed is run before phase 3.
 
-# Frontend
-cd repo/client && npm test
-```
+### Testing mode
 
-### End-to-End tests (Playwright)
+There is exactly one supported mode:
 
-E2E tests run a login-flow smoke suite against a real browser.
+| Mode | Command |
+|------|---------|
+| Canonical (Docker-only, CI-aligned) | `bash repo/run_tests.sh` |
 
-Playwright automatically starts **two isolated servers** so tests never
-interfere with the developer's running servers (ports 3000/3001):
+Backend, frontend, and E2E all run inside their respective compose services
+(`api`, `web`, `e2e`). No host runtime is invoked at any point.
 
-| Server | Port | Purpose |
-|--------|------|---------|
-| NestJS backend | 3101 | Dedicated E2E backend with relaxed login throttle |
-| Vite frontend | 3100 | Dev server proxying `/api/*` to port 3101 |
+### End-to-End tests (Playwright, Docker-only)
 
-**One-time setup:**
+The `e2e` Compose service — built from `e2e.Dockerfile` — is based on
+`mcr.microsoft.com/playwright` and runs Chromium inside the container. It
+joins the shared Compose network and talks to the already-running `web`
+and `api` services. `run_tests.sh` brings up `api` + `web`, runs the demo
+seed via `docker compose exec api npm run seed:demo`, and then invokes the
+`e2e` service via `docker compose run --rm`.
 
-```
-cd repo/server
-npx nest build
+`e2e-entrypoint.sh` starts two `socat` forwarders before Playwright boots:
 
-cd repo
-npm install
-npx playwright install chromium
-```
+| In-container port | Forwarded to |
+|-------------------|--------------|
+| `localhost:3000` | `web:3000` |
+| `localhost:3001` | `api:3001` |
 
-**Prerequisites before each run:**
+This matters because Chromium only treats `localhost` (and `127.0.0.1`) as
+a secure origin over plain HTTP — a hard requirement for registering a
+service worker. Without this forwarding, `public/sw.js` would never
+activate inside Docker and the SW lifecycle tests would be unrunnable.
 
-1. PostgreSQL running with the `greenleaf_db` database.
-2. Demo seed loaded (provides test credentials):
-   ```
-   cd repo/server
-   npm run seed:demo
-   ```
-3. Server compiled (only needed after backend code changes):
-   ```
-   cd repo/server
-   npx nest build
-   ```
+`playwright.config.docker.ts` is the config used inside the container. It
+does **not** start its own webServer (the `api` and `web` containers are
+already running) and takes `baseURL` from `E2E_BASE_URL`
+(`http://localhost:3000` by default).
 
-**Run E2E tests:**
+Env vars consumed by the E2E runner (all have defaults in
+`docker-compose.yml`):
 
-```
-cd repo
-npm run test:e2e
-```
+| Variable | Default | Used by |
+|----------|---------|---------|
+| `E2E_BASE_URL` | `http://localhost:3000` | Playwright `baseURL` in Docker |
+| `E2E_API_URL` | `http://localhost:3001` | API-only E2E specs that call the backend directly |
+| `E2E_ADMIN_USER` | `demo_admin` | UI login specs |
+| `E2E_ADMIN_PASS` | `Demo1234!` | UI login specs |
+| `AUTH_LOGIN_THROTTLE_LIMIT` | `1000` | Relaxed throttle so repeat E2E runs don't 429 |
 
-**Environment variables (optional):**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `E2E_ADMIN_USER` | `demo_admin` | Username for the login test |
-| `E2E_ADMIN_PASS` | `Demo1234!` | Password for the login test |
-| `AUTH_LOGIN_THROTTLE_LIMIT` | `1000` (E2E) / `10` (prod) | Login attempts per 15 min — set via `playwright.config.ts` for E2E |
-
-> **Note:** The E2E backend uses a fallback `JWT_SECRET` when none is set
-> in the environment. This is safe because the E2E backend is ephemeral
-> and shares the same database (same password hashes). If ports 3100/3101
-> are already in use, Playwright will reuse the existing servers.
+Override any of these by adding them to `repo/.env` before running
+`bash repo/run_tests.sh`. There is no host-side Playwright execution path.
 
 ---
 
@@ -259,37 +190,42 @@ npm run test:e2e
 
 ```
 repo/
-├── docker-compose.yml      Full-stack service definitions (db, api, web)
-├── run_tests.sh            CI test runner — requires Docker only
-├── server/                 NestJS API
+├── docker-compose.yml           Full-stack service definitions (db, api, web, e2e)
+├── run_tests.sh                 Canonical test runner — Docker-only, drives all 3 suites
+├── e2e.Dockerfile               Playwright runner image (Chromium + socat)
+├── e2e-entrypoint.sh            Starts socat forwarders then execs Playwright
+├── playwright.config.docker.ts  Playwright config used inside the e2e container
+├── package.json                 E2E runner deps (@playwright/test), installed into the e2e image
+├── server/                      NestJS API
 │   ├── src/
-│   │   ├── auth/           JWT + session auth, change-password
-│   │   ├── bootstrap/      Startup admin-existence check
-│   │   ├── procurement/    Purchase requests, approvals, low-stock alerts
+│   │   ├── auth/                JWT + session auth, change-password
+│   │   ├── bootstrap/           Startup admin-existence check
+│   │   ├── procurement/         Purchase requests, approvals, low-stock alerts
 │   │   ├── purchase-orders/
-│   │   ├── receiving/      Goods receiving, putaway locations
-│   │   ├── returns/        Return authorizations, restocking fee engine
-│   │   ├── suppliers/      Supplier CRUD + portal
+│   │   ├── receiving/           Goods receiving, putaway locations
+│   │   ├── returns/             Return authorizations, restocking fee engine
+│   │   ├── suppliers/           Supplier CRUD + portal
 │   │   ├── funds-ledger/
-│   │   ├── knowledge-base/ Articles, versioning, favorites
-│   │   ├── search/         Full-text search, synonyms
-│   │   ├── notifications/  In-app notification center
-│   │   ├── budget/         Budget cap enforcement + authorized overrides
-│   │   ├── data-quality/   Deduplication, quality checks
-│   │   ├── observability/  Structured logs, job metrics, system stats
-│   │   ├── seeds/          Non-production demo seed (npm run seed:demo)
-│   │   └── migrations/     18 sequential DB migrations
+│   │   ├── knowledge-base/      Articles, versioning, favorites
+│   │   ├── search/              Full-text search, synonyms
+│   │   ├── notifications/       In-app notification center
+│   │   ├── budget/              Budget cap enforcement + authorized overrides
+│   │   ├── data-quality/        Deduplication, quality checks
+│   │   ├── observability/       Structured logs, job metrics, system stats
+│   │   ├── seeds/               Non-production demo seed (see *Seed / Demo Data*)
+│   │   └── migrations/          Sequential DB migrations
 │   └── package.json
 ├── tests/
-│   ├── server/             Jest test suites (unit + DB integration)
-│   └── client/             Vitest test suites
-└── client/                 React + Vite SPA
-    ├── public/sw.js        User-scoped offline KB cache
+│   ├── server/                  Jest — unit + real-DB integration (per-module + cross-module)
+│   ├── client/                  Vitest — component + service-worker unit tests
+│   └── e2e/                     Playwright — browser + API E2E specs
+└── client/                      React + Vite SPA
+    ├── public/sw.js             User-scoped offline KB cache (service worker)
     ├── src/
-    │   ├── api/            Typed fetch wrappers per domain
-    │   ├── components/     Layout, Sidebar, TopNav, NotificationBell
-    │   ├── contexts/       AuthContext (login/logout/SW cache lifecycle)
-    │   └── pages/          One component per route
+    │   ├── api/                 Typed fetch wrappers per domain
+    │   ├── components/          Layout, Sidebar, TopNav, NotificationBell
+    │   ├── contexts/            AuthContext (login/logout/SW cache lifecycle)
+    │   └── pages/               One component per route
     └── package.json
 ```
 
@@ -304,13 +240,15 @@ repo/
 | `DB_USER` | `greenleaf` | Database user |
 | `DB_PASS` | `greenleaf_secret` | Database password |
 | `DB_NAME` | `greenleaf_db` | Database name |
-| `JWT_SECRET` | **required** | JWT signing secret — server **will not start** without this |
+| `JWT_SECRET` | `change-me-to-a-random-secret` (compose default) | JWT signing secret. Replace before any production deployment. |
 | `SESSION_TIMEOUT_MINUTES` | `30` | Sliding session window |
-| `API_PORT` | `3001` | Backend listen port |
-| `CORS_ORIGIN` | `http://localhost:3000` | Allowed frontend origin |
+| `API_PORT` | `3001` | Backend listen port (also the published Compose port) |
+| `WEB_PORT` | `3000` | Frontend listen port (Vite dev server, published by Compose) |
+| `CORS_ORIGIN` | `http://localhost:3000` | Allowed frontend origin (read by `server/src/main.ts`) |
 | `ADMIN_BOOTSTRAP_USERNAME` | `admin` | Initial admin username (one-time) |
 | `ADMIN_BOOTSTRAP_PASSWORD` | `change-me` | Initial admin password (one-time) |
-| `FIELD_ENCRYPTION_KEY` | **required** | 32-byte hex key for AES-256-GCM encryption of supplier `bankingNotes` and `internalRiskFlag` fields |
+| `AUTH_LOGIN_THROTTLE_LIMIT` | `1000` in Compose, `10` when unset | Login attempts per 15 minutes before 429 |
+| `FIELD_ENCRYPTION_KEY` | `change-me-to-a-random-32-char-key` (compose default) | 32-byte hex key for AES-256-GCM encryption of supplier `bankingNotes` and `internalRiskFlag` fields. Replace before any production deployment. |
 | `NODE_ENV` | — | Set to `production` to enable secure cookies |
 
 ---
@@ -345,13 +283,19 @@ The selected `entryMode` (`BARCODE` or `MANUAL`) is stored on the receipt record
 
 ---
 
-## Seed / Demo Data
+## Seed / Demo Data (optional)
 
-A non-production seed creates one user per role plus minimal linked data for a full E2E walkthrough.
+A non-production seed creates one user per role plus minimal linked data for
+a demo walk-through. The seed is optional — it is **not required** for the
+canonical Docker startup above (which already provisions the admin bootstrap
+user automatically). `bash repo/run_tests.sh` also runs this seed itself
+before the E2E phase.
+
+Run it inside the `api` container (no host Node install needed):
 
 ```bash
-cd repo/server
-npm run seed:demo
+# With `docker compose up` already running in another shell:
+docker compose exec api npm run seed:demo
 ```
 
 **All demo users share the password `Demo1234!`**
@@ -482,13 +426,21 @@ The banner updates reactively — going online clears it, going offline shows it
 
 ## JWT Secret Requirement
 
-`JWT_SECRET` is **required** — the server will throw and refuse to start if it is absent. There is no insecure default fallback. Generate a strong secret before deployment:
+For **local Docker runs** the compose file supplies a safe default
+(`JWT_SECRET: ${JWT_SECRET:-change-me-to-a-random-secret}`) so the stack
+starts out of the box. **Before any production deployment** replace it with
+a strong, random value and set it as `JWT_SECRET` in your deployment secret
+store (or `repo/.env` for local overrides).
+
+Generate a strong secret without a local Node install:
 
 ```bash
-node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-```
+# Canonical — uses the already-running api container
+docker compose exec api node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
-Set the output as `JWT_SECRET` in your `.env` file.
+# If the stack is stopped, run it one-shot in a throwaway container
+docker run --rm node:20-alpine node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
 
 ---
 
