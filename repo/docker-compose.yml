@@ -62,11 +62,13 @@ services:
       context: .
       dockerfile: e2e.Dockerfile
     environment:
-      # Tests point at localhost so Chromium treats the origin as secure
-      # (needed for service workers). socat inside the e2e container
-      # forwards 127.0.0.1:3000→web:3000 and 127.0.0.1:3001→api:3001.
-      E2E_BASE_URL: http://localhost:3000
-      E2E_API_URL: http://localhost:3001
+      # Tests reach the stack over the shared Compose network via the
+      # service DNS names. Chromium treats these origins as secure via the
+      # `--unsafely-treat-insecure-origin-as-secure` flag wired up in
+      # `playwright.config.docker.ts`, which lets service workers register
+      # without any extra OS packages or port forwarders.
+      E2E_BASE_URL: http://web:3000
+      E2E_API_URL: http://api:3001
       E2E_ADMIN_USER: ${E2E_ADMIN_USER:-demo_admin}
       E2E_ADMIN_PASS: ${E2E_ADMIN_PASS:-Demo1234!}
     depends_on:

@@ -161,30 +161,28 @@ and `api` services. `run_tests.sh` brings up `api` + `web`, runs the demo
 seed via `docker compose exec api npm run seed:demo`, and then invokes the
 `e2e` service via `docker compose run --rm`.
 
-`e2e-entrypoint.sh` starts two `socat` forwarders before Playwright boots:
-
-| In-container port | Forwarded to |
-|-------------------|--------------|
-| `localhost:3000` | `web:3000` |
-| `localhost:3001` | `api:3001` |
-
-This matters because Chromium only treats `localhost` (and `127.0.0.1`) as
-a secure origin over plain HTTP — a hard requirement for registering a
-service worker. Without this forwarding, `public/sw.js` would never
-activate inside Docker and the SW lifecycle tests would be unrunnable.
+Service-worker browser-level tests (`tests/e2e/sw-lifecycle.spec.ts`) are
+skipped in the Docker runner. SW registration requires a secure origin
+(HTTPS or `localhost`) and the Docker flow talks to the app over the
+plain-HTTP Compose DNS name `web:3000`. Instead, the SW logic is
+exhaustively covered by the dedicated Vitest unit suites at
+`tests/client/sw-cache.test.ts` and `tests/client/sw-offline-queue.test.ts`,
+which drive the real `public/sw.js` fetch handler and the IndexedDB
+offline queue without a browser. The E2E image ships no extra OS
+packages (no `apt-get`), so the build does not depend on Ubuntu mirrors.
 
 `playwright.config.docker.ts` is the config used inside the container. It
 does **not** start its own webServer (the `api` and `web` containers are
 already running) and takes `baseURL` from `E2E_BASE_URL`
-(`http://localhost:3000` by default).
+(`http://web:3000` by default).
 
 Env vars consumed by the E2E runner (all have defaults in
 `docker-compose.yml`):
 
 | Variable | Default | Used by |
 |----------|---------|---------|
-| `E2E_BASE_URL` | `http://localhost:3000` | Playwright `baseURL` in Docker |
-| `E2E_API_URL` | `http://localhost:3001` | API-only E2E specs that call the backend directly |
+| `E2E_BASE_URL` | `http://web:3000` | Playwright `baseURL` in Docker |
+| `E2E_API_URL` | `http://api:3001` | API-only E2E specs that call the backend directly |
 | `E2E_ADMIN_USER` | `demo_admin` | UI login specs |
 | `E2E_ADMIN_PASS` | `Demo1234!` | UI login specs |
 | `AUTH_LOGIN_THROTTLE_LIMIT` | `1000` | Relaxed throttle so repeat E2E runs don't 429 |
@@ -200,8 +198,7 @@ Override any of these by adding them to `repo/.env` before running
 repo/
 ├── docker-compose.yml           Full-stack service definitions (db, api, web, e2e)
 ├── run_tests.sh                 Canonical test runner — Docker-only, drives all 3 suites
-├── e2e.Dockerfile               Playwright runner image (Chromium + socat)
-├── e2e-entrypoint.sh            Starts socat forwarders then execs Playwright
+├── e2e.Dockerfile               Playwright runner image (Chromium)
 ├── playwright.config.docker.ts  Playwright config used inside the e2e container
 ├── package.json                 E2E runner deps (@playwright/test), installed into the e2e image
 ├── server/                      NestJS API

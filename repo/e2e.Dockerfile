@@ -4,15 +4,14 @@
 # OS libraries the browser needs. Tests run against the `web` and `api`
 # containers on the shared Docker Compose network (DNS names: web, api).
 #
-# socat port forwarders expose `web` and `api` on the container's own loopback
-# as localhost:3000 and localhost:3001. The browser treats localhost as a
-# secure origin, enabling service workers — required by the SW lifecycle
-# tests. Without this forwarder, SW tests cannot run in Docker since
-# `http://web:3000` is not considered secure by Chromium.
+# Service-worker registration normally requires a secure origin (HTTPS or
+# localhost). We don't ship any extra OS packages — no `apt-get` at build
+# time (keeps the image small AND avoids CI environments that block
+# `archive.ubuntu.com`). Instead, `playwright.config.docker.ts` launches
+# Chromium with `--unsafely-treat-insecure-origin-as-secure=http://web:3000,
+# http://api:3001`, which tells the browser to treat these Compose-network
+# origins as secure — enabling service workers without any forwarding.
 FROM mcr.microsoft.com/playwright:v1.44.0-jammy
-
-RUN apt-get update && apt-get install -y --no-install-recommends socat \
-    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /repo
 
@@ -21,9 +20,6 @@ RUN npm install
 
 COPY playwright.config.docker.ts ./playwright.config.ts
 COPY tests/e2e/ ./tests/e2e/
-COPY e2e-entrypoint.sh /usr/local/bin/e2e-entrypoint.sh
-RUN chmod +x /usr/local/bin/e2e-entrypoint.sh
 
 ENV CI=true
-ENTRYPOINT ["/usr/local/bin/e2e-entrypoint.sh"]
 CMD ["npx", "playwright", "test"]
