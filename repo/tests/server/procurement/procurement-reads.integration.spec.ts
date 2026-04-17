@@ -124,6 +124,12 @@ describe('Procurement — read/update/cancel/low-stock, real DB', () => {
     const qr = ds.createQueryRunner();
     await qr.connect();
     try {
+      // Clean up in FK-safe order. Low-stock-alert tests may create PRs
+      // WITHOUT supplierId, so we also scope by requestedBy (= one of our
+      // synthetic users) to catch those rows. The PurchaseRequest entity
+      // has requestedBy NOT NULL with FK → users SET NULL, which means
+      // the DELETE users later would fail if any PR row still references
+      // them — hence we must delete all dependent PR/PO rows first.
       await qr.query(
         `DELETE FROM notifications WHERE "recipientId" IN
          (SELECT id FROM users WHERE username LIKE $1)`,
@@ -135,26 +141,38 @@ describe('Procurement — read/update/cancel/low-stock, real DB', () => {
         [`${RUN_TAG}%`],
       );
       await qr.query(
-        `DELETE FROM purchase_order_line_items WHERE "poId" IN
-         (SELECT id FROM purchase_orders WHERE "supplierId" = $1)`,
-        [ids.supplierId],
-      );
-      await qr.query(`DELETE FROM purchase_orders WHERE "supplierId" = $1`, [
-        ids.supplierId,
-      ]);
-      await qr.query(
-        `DELETE FROM approvals WHERE "requestId" IN
-         (SELECT id FROM purchase_requests WHERE "supplierId" = $1)`,
-        [ids.supplierId],
+        `DELETE FROM purchase_order_line_items WHERE "poId" IN (
+           SELECT id FROM purchase_orders
+           WHERE "supplierId" = $1 OR "createdBy" IN
+             (SELECT id FROM users WHERE username LIKE $2))`,
+        [ids.supplierId, `${RUN_TAG}%`],
       );
       await qr.query(
-        `DELETE FROM purchase_request_line_items WHERE "requestId" IN
-         (SELECT id FROM purchase_requests WHERE "supplierId" = $1)`,
-        [ids.supplierId],
+        `DELETE FROM purchase_orders
+         WHERE "supplierId" = $1 OR "createdBy" IN
+           (SELECT id FROM users WHERE username LIKE $2)`,
+        [ids.supplierId, `${RUN_TAG}%`],
       );
-      await qr.query(`DELETE FROM purchase_requests WHERE "supplierId" = $1`, [
-        ids.supplierId,
-      ]);
+      await qr.query(
+        `DELETE FROM approvals WHERE "requestId" IN (
+           SELECT id FROM purchase_requests
+           WHERE "supplierId" = $1 OR "requestedBy" IN
+             (SELECT id FROM users WHERE username LIKE $2))`,
+        [ids.supplierId, `${RUN_TAG}%`],
+      );
+      await qr.query(
+        `DELETE FROM purchase_request_line_items WHERE "requestId" IN (
+           SELECT id FROM purchase_requests
+           WHERE "supplierId" = $1 OR "requestedBy" IN
+             (SELECT id FROM users WHERE username LIKE $2))`,
+        [ids.supplierId, `${RUN_TAG}%`],
+      );
+      await qr.query(
+        `DELETE FROM purchase_requests
+         WHERE "supplierId" = $1 OR "requestedBy" IN
+           (SELECT id FROM users WHERE username LIKE $2)`,
+        [ids.supplierId, `${RUN_TAG}%`],
+      );
       await qr.query(`DELETE FROM suppliers WHERE id = $1`, [ids.supplierId]);
       await qr.query(`DELETE FROM users WHERE username LIKE $1`, [
         `${RUN_TAG}%`,
@@ -347,7 +365,7 @@ describe('Procurement — read/update/cancel/low-stock, real DB', () => {
       expect(res.status).toBe(201);
     });
 
-    it('400 when items array is empty', async () => {
+    it('400 when items array is empty — precise pre-submit validation message', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/procurement/low-stock-alert')
         .set('Authorization', `Bearer ${asClerk()}`)
@@ -355,8 +373,10 @@ describe('Procurement — read/update/cancel/low-stock, real DB', () => {
           title: `${RUN_TAG} bad alert`,
           items: [],
         });
-      // Underlying service rejects zero-line requests at submit time (400).
-      expect([400, 500]).toContain(res.status);
+      expect(res.status).toBe(400);
+      // Exact guard emitted by ProcurementService.ingestLowStockAlert before
+      // the PR is even created.
+      expect(res.body.message).toMatch(/at least one item/i);
     });
 
     it('400 when quantity is below @Min(1)', async () => {

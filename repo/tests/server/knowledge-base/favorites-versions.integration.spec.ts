@@ -32,6 +32,7 @@ import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 
 import { KnowledgeBaseModule } from '../../../server/src/knowledge-base/knowledge-base.module';
+import { NotificationsModule } from '../../../server/src/notifications/notifications.module';
 import { JwtStrategy } from '../../../server/src/auth/strategies/jwt.strategy';
 import { JwtAuthGuard } from '../../../server/src/common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../server/src/common/guards/roles.guard';
@@ -61,6 +62,8 @@ describe('Knowledge Base — favorites + versions, real DB', () => {
           secret: TEST_JWT_SECRET,
           signOptions: { expiresIn: '15m' },
         }),
+        // @Global() — satisfies KnowledgeBaseService's NotificationService dep.
+        NotificationsModule,
         KnowledgeBaseModule,
       ],
       providers: [
@@ -228,17 +231,22 @@ describe('Knowledge Base — favorites + versions, real DB', () => {
 
   describe('Per-user favorites lifecycle', () => {
     it('GET favorite starts as false; POST makes it true; DELETE makes it false again', async () => {
+      // KnowledgeBaseService.isFavorited() returns a plain `boolean`.
+      // Express serialises a primitive return as plain text (Content-Type
+      // text/html), so supertest exposes it at `res.text`, not `res.body`.
+      const parseBoolResponse = (res: {
+        body: unknown;
+        text: string;
+      }): boolean => {
+        if (typeof res.body === 'boolean') return res.body;
+        return res.text.trim() === 'true';
+      };
+
       const before = await request(app.getHttpServer())
         .get(`/api/articles/${ids.article1Id}/favorite`)
         .set('Authorization', `Bearer ${asSpecialist()}`);
       expect(before.status).toBe(200);
-      // The endpoint may return either a boolean or { isFavorited: bool }.
-      // Either way we extract a boolean and assert its value.
-      const parse = (body: unknown) =>
-        typeof body === 'boolean'
-          ? body
-          : (body as { isFavorited?: boolean }).isFavorited;
-      expect(parse(before.body)).toBe(false);
+      expect(parseBoolResponse(before)).toBe(false);
 
       const add = await request(app.getHttpServer())
         .post(`/api/articles/${ids.article1Id}/favorite`)
@@ -248,7 +256,7 @@ describe('Knowledge Base — favorites + versions, real DB', () => {
       const mid = await request(app.getHttpServer())
         .get(`/api/articles/${ids.article1Id}/favorite`)
         .set('Authorization', `Bearer ${asSpecialist()}`);
-      expect(parse(mid.body)).toBe(true);
+      expect(parseBoolResponse(mid)).toBe(true);
 
       const rows = await ds.query(
         `SELECT COUNT(*)::int AS n FROM user_favorites WHERE "userId" = $1 AND "articleId" = $2`,
@@ -264,7 +272,7 @@ describe('Knowledge Base — favorites + versions, real DB', () => {
       const after = await request(app.getHttpServer())
         .get(`/api/articles/${ids.article1Id}/favorite`)
         .set('Authorization', `Bearer ${asSpecialist()}`);
-      expect(parse(after.body)).toBe(false);
+      expect(parseBoolResponse(after)).toBe(false);
     });
 
     it('POST is idempotent — favoriting twice is still 204 and produces one row', async () => {

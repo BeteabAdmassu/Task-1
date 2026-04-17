@@ -30,8 +30,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 
-import { ReturnPolicyController } from '../../../server/src/returns/return-policy.controller';
 import { ReturnsModule } from '../../../server/src/returns/returns.module';
+import { NotificationsModule } from '../../../server/src/notifications/notifications.module';
+import { FundsLedgerModule } from '../../../server/src/funds-ledger/funds-ledger.module';
 import { JwtStrategy } from '../../../server/src/auth/strategies/jwt.strategy';
 import { JwtAuthGuard } from '../../../server/src/common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../server/src/common/guards/roles.guard';
@@ -65,9 +66,14 @@ describe('Return Policy — real-DB integration', () => {
           secret: TEST_JWT_SECRET,
           signOptions: { expiresIn: '15m' },
         }),
+        // Both are @Global(); satisfies ReturnsService's deps on
+        // FundsLedgerService and NotificationService.
+        // ReturnsModule already registers ReturnPolicyController plus
+        // ReturnsService + deps, so we just import it and do not re-declare.
+        NotificationsModule,
+        FundsLedgerModule,
         ReturnsModule,
       ],
-      controllers: [ReturnPolicyController],
       providers: [
         JwtStrategy,
         { provide: APP_GUARD, useClass: JwtAuthGuard },

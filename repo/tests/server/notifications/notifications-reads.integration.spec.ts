@@ -97,10 +97,13 @@ describe('Notifications read-side — real DB integration', () => {
         title: string,
         isRead: boolean,
       ) => {
+        // Use 4 distinct placeholders — reusing $2 for both the varchar title
+        // and the text message can make Postgres fail to deduce the
+        // parameter type ("inconsistent types deduced for parameter").
         await qr.query(
           `INSERT INTO notifications ("recipientId", type, title, message, "isRead", "isQueued")
-           VALUES ($1, 'SYSTEM_ALERT', $2, $2, $3, false)`,
-          [recipientId, title, isRead],
+           VALUES ($1, 'SYSTEM_ALERT', $2, $3, $4, false)`,
+          [recipientId, title, title, isRead],
         );
       };
       // Alice: 3 notifications, 2 unread

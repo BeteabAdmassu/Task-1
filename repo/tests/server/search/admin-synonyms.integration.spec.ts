@@ -218,20 +218,26 @@ describe('Admin synonyms — real DB integration', () => {
   });
 
   describe('Failure paths', () => {
-    it('409/500 or duplicate-rejection on duplicate term', async () => {
+    it('409 on duplicate term — SearchService throws a typed ConflictException', async () => {
+      // The service does `term.toLowerCase()` before both the existence check
+      // and the INSERT, so a duplicate collides before the DB ever sees it.
       const unique = `${TERM_PREFIX}-eggplant`;
       const a = await request(app.getHttpServer())
         .post('/api/admin/synonyms')
         .set('Authorization', `Bearer ${asAdmin()}`)
         .send({ term: unique, synonyms: ['aubergine'] });
       expect(a.status).toBe(201);
+      // Assert the service's lowercase contract on the created row.
+      expect(a.body.term).toBe(unique); // already lowercase prefix
+      expect(a.body.synonyms).toEqual(['aubergine']);
 
       const b = await request(app.getHttpServer())
         .post('/api/admin/synonyms')
         .set('Authorization', `Bearer ${asAdmin()}`)
-        .send({ term: unique, synonyms: ['brinjal'] });
-      // The `term` column is unique — any conflict bubbles up as 4xx/5xx.
-      expect([400, 409, 500]).toContain(b.status);
+        .send({ term: unique.toUpperCase(), synonyms: ['brinjal'] });
+      expect(b.status).toBe(409);
+      // ConflictException message from SearchService.createSynonym()
+      expect(b.body.message).toMatch(/already exists/i);
     });
 
     it('400 when synonyms array is empty (@ArrayNotEmpty)', async () => {
